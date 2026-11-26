@@ -1,0 +1,25 @@
+{
+  "name": "pi-setup",
+  "version": "0.1.0",
+  "description": "Personal pi coding agent skills and extensions, for one-click setup on a vanilla pi install.",
+  "private": true,
+  "scripts": {
+    "setup": "pi install . && node scripts/install-packages.js && node scripts/generate-workflow-json.js && scripts/install-skills.sh"
+  },
+  "keywords": [
+    "pi-package",
+    "pi-skill",
+    "pi-extension"
+  ],
+  "pi": {
+    "skills": [
+      "./skills"
+    ],
+    "extensions": [
+      "./extensions"
+    ],
+    "themes": [
+      "./themes"
+    ]
+  }
+}

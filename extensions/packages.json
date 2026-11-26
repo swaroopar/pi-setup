@@ -1,0 +1,85 @@
+[
+  {
+    "source": "npm:pi-loop-police",
+    "description": "Detects and interrupts infinite thinking-block and tool-call loops in real time before they exhaust your context window."
+  },
+  {
+    "source": "npm:pi-web-access",
+    "description": "Web search, URL fetching, GitHub repo cloning, PDF extraction, YouTube/video understanding for pi."
+  },
+  {
+    "source": "npm:@juicesharp/rpiv-ask-user-question",
+    "description": "A structured questionnaire the model can put to you when it would otherwise guess, with typed options instead of free-form replies."
+  },
+  {
+    "source": "npm:@tintinweb/pi-subagents",
+    "description": "Claude Code-like sub-agents and workflow orchestration for pi -- parallel execution, live widget, fleet view, custom agent types, mid-run steering."
+  },
+  {
+    "source": "npm:pi-simplify",
+    "description": "Reviews recently changed code for clarity, consistency, and maintainability."
+  },
+  {
+    "source": "npm:pi-rtk-optimizer",
+    "description": "Optimizes RTK command rewriting and tool output compaction for the coding agent."
+  },
+  {
+    "source": "npm:pi-powerline-footer",
+    "description": "Powerline-style status bar extension."
+  },
+  {
+    "source": "npm:@tintinweb/pi-tasks",
+    "description": "Claude Code-style task tracking and coordination for pi."
+  },
+  {
+    "source": "npm:@quintinshaw/pi-dynamic-workflows",
+    "description": "Claude-Code-style dynamic workflows for pi -- fan a task out across subagents with model routing, token/cost accounting, resume, git-worktree isolation, the /workflows TUI, and /deep-research."
+  },
+  {
+    "source": "npm:pi-fff",
+    "description": "FFF-powered fuzzy file resolution, autocomplete, and content search."
+  },
+  {
+    "source": "git:github.com/mitsuhiko/agent-stuff",
+    "description": "Armin Ronacher's pi coding agent commands, skills, extensions, and themes (mitsuhiko/agent-stuff). Tracked via git (not npm:mitsupi) since npm's last publish lags behind main. Installed in full so `pi update` keeps it current, but filtered to only these extensions and skills.",
+    "extensions": [
+      "extensions/answer.ts",
+      "extensions/continue.ts",
+      "extensions/no-sleep.ts",
+      "extensions/unified-edit.ts",
+      "extensions/notify.ts",
+      "extensions/prompt-editor.ts",
+      "extensions/uv.ts"
+    ],
+    "skills": [
+      "skills/github",
+      "skills/native-web-search",
+      "skills/uv",
+      "skills/web-browser"
+    ]
+  },
+  {
+    "source": "npm:pi-context-prune",
+    "description": "Prunes future context while preserving original tool-call history."
+  },
+  {
+    "source": "npm:@championswimmer/pi-speedometer",
+    "description": "Live tokens/sec and time-to-first-token in the status bar."
+  },
+  {
+    "source": "git:github.com/DietrichGebert/ponytail",
+    "description": "Lazy senior dev mode for AI agents -- the best code is the code you never wrote."
+  },
+  {
+    "source": "git:github.com/algal/pi-openai-server-compaction",
+    "description": "OpenAI server-side compaction with Codex-quality continuity."
+  },
+  {
+    "source": "git:github.com/dodo-reach/pi-clarify",
+    "description": "Rewrites rough, plain-language prompts into precise technical prompts before sending to pi."
+  },
+  {
+    "source": "git:github.com/championswimmer/pi-context-usage",
+    "description": "Context window usage visualization."
+  }
+]
