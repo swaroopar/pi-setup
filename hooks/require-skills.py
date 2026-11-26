@@ -1,21 +1,6 @@
 #!/usr/bin/env python3
-"""Claude Code hook: every change must go through the required skills.
-
-Wired to two events (see .claude/settings.json):
-  - PreToolUse (Bash): blocks `git commit` until the skills have run.
-  - Stop: stops Claude from ending its turn with unreviewed changes.
-
-Scope: only what happened after the latest git commit (HEAD's commit time)
-counts. Skill runs before that are ignored. Using git, not the session log,
-means commits made anywhere (agent, `!` prompt, another terminal) reset it.
-
-Rules (when files were edited since that commit):
-  1. Every skill in REQUIRED must have run since that commit.
-  2. code-review must have run after the last edit.
-
-A skill counts if Claude called the Skill tool, or the user typed /<skill>.
-"""
 import json
+import os
 import re
 import subprocess
 import sys
@@ -26,8 +11,9 @@ REVIEW = "code-review"
 
 EDIT_TOOLS = {"Edit", "Write", "MultiEdit", "NotebookEdit"}
 EDIT_MCP_RE = re.compile(r"^mcp__.*__(apply_patch|create_new_file|replace_\w+|edit_\w+|write_\w+)$")
-# `git` must be the command itself (start of line or after ; & | && ||), not text inside a string.
-COMMIT_RE = re.compile(r"(?:^|[;&|\n(]\s*)git(?:\s+-[cC]\s+\S+|\s+--?[\w-]+(?:=\S+)?)*\s+commit\b")
+COMMIT_RE = re.compile(
+    r"(?:^|[;&|\n(]\s*)(?:rtk\s+(?:proxy\s+)?)?git(?:\s+-[cC]\s+\S+|\s+--?[\w-]+(?:=\S+)?)*\s+commit\b"
+)
 SLASH_RE = re.compile(r"<command-name>/?([\w:.-]+)</command-name>")
 
 
@@ -35,14 +21,30 @@ def short(name):
     return name.split(":")[-1]
 
 
-def last_commit_time(cwd):
-    """Unix time of HEAD's commit, or 0 when not in a git repo / no commits."""
+def git(cwd, *args):
     try:
-        out = subprocess.run(["git", "-C", cwd or ".", "log", "-1", "--format=%ct"],
-                             capture_output=True, text=True, timeout=5)
-        return int(out.stdout.strip() or 0)
-    except (OSError, ValueError, subprocess.SubprocessError):
+        out = subprocess.run(["git", "-C", cwd or ".", *args], capture_output=True, text=True, timeout=5)
+        return out.stdout if out.returncode == 0 else None
+    except (OSError, subprocess.SubprocessError):
+        return None
+
+
+def last_commit_time(cwd):
+    out = git(cwd, "log", "-1", "--format=%ct")
+    return int(out.strip()) if out and out.strip().isdigit() else 0
+
+
+def newest_uncommitted_change(cwd):
+    root = git(cwd, "rev-parse", "--show-toplevel")
+    status = git(cwd, "status", "--porcelain", "-z", "--untracked-files=all")
+    if not root or status is None:
         return 0
+    newest = 0
+    for record in status.split("\0"):
+        path = os.path.join(root.strip(), record[3:])
+        if len(record) > 3 and os.path.isfile(path):
+            newest = max(newest, os.path.getmtime(path))
+    return newest
 
 
 def entry_time(e):
@@ -53,7 +55,6 @@ def entry_time(e):
 
 
 def read_events(path, since):
-    """Ordered events after `since`: ("edit", None) | ("skill", name)."""
     events = []
     try:
         lines = open(path, encoding="utf-8").read().splitlines()
@@ -64,7 +65,8 @@ def read_events(path, since):
             e = json.loads(line)
         except ValueError:
             continue
-        if e.get("isSidechain") or entry_time(e) <= since:
+        at = entry_time(e)
+        if e.get("isSidechain") or at <= since:
             continue
         content = (e.get("message") or {}).get("content")
         blocks = content if isinstance(content, list) else [{"type": "text", "text": content or ""}]
@@ -73,23 +75,24 @@ def read_events(path, since):
                 continue
             if e.get("type") == "user" and b.get("type") == "text":
                 for m in SLASH_RE.findall(b.get("text") or ""):
-                    events.append(("skill", short(m)))
+                    events.append((at, "skill", short(m)))
             elif e.get("type") == "assistant" and b.get("type") == "tool_use":
                 name, inp = b.get("name", ""), b.get("input") or {}
                 if name in EDIT_TOOLS or EDIT_MCP_RE.match(name):
-                    events.append(("edit", None))
+                    events.append((at, "edit", None))
                 elif name == "Skill":
-                    events.append(("skill", short(inp.get("skill", ""))))
+                    events.append((at, "skill", short(inp.get("skill", ""))))
     return events
 
 
-def missing_skills(events):
-    edits = [i for i, (k, _) in enumerate(events) if k == "edit"]
-    if not edits:
+def missing_skills(events, last_file_change=0):
+    last_edit = max([t for t, k, _ in events if k == "edit"] + [last_file_change])
+    if not last_edit:
         return []
-    ran = {n for k, n in events if k == "skill"}
+    skill_runs = [(t, n) for t, k, n in events if k == "skill"]
+    ran = {n for _, n in skill_runs}
     missing = [s for s in REQUIRED if s not in ran]
-    if REVIEW in ran and not any(k == "skill" and n == REVIEW for k, n in events[edits[-1] + 1:]):
+    if REVIEW in ran and not any(n == REVIEW and t >= last_edit for t, n in skill_runs):
         missing.append(f"{REVIEW} (again: files changed after the last review)")
     return missing
 
@@ -104,8 +107,10 @@ def message(missing):
 
 
 def check(data):
-    since = last_commit_time(data.get("cwd"))
-    return missing_skills(read_events(data.get("transcript_path", ""), since))
+    cwd = data.get("cwd")
+    since = last_commit_time(cwd)
+    events = read_events(data.get("transcript_path", ""), since)
+    return missing_skills(events, newest_uncommitted_change(cwd))
 
 
 def main():
@@ -126,7 +131,7 @@ def main():
 
     if event == "Stop":
         if data.get("stop_hook_active"):
-            return  # already nudged once; don't loop
+            return
         missing = check(data)
         if missing:
             print(json.dumps({"decision": "block", "reason": message(missing)}))

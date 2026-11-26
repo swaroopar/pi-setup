@@ -23,6 +23,17 @@ Modeled on [mitsuhiko/agent-stuff](https://github.com/mitsuhiko/agent-stuff) (pu
   add new code comments (existing ones stay; tool directives like `eslint-disable` are allowed).
   Both Claude hooks are registered **globally** in `~/.claude/settings.json` by
   `scripts/install-claude-hooks.py` (part of `npm run setup`), pointing at this checkout.
+
+### How `require-skills` decides
+
+- Reset point: HEAD's commit time. Skill runs before it are ignored.
+- "Changed" = uncommitted files in `git status` (catches `sed`, scripts, any tool) **or** edit-tool
+  calls in the session (covers non-git folders).
+- Last edit time = newest mtime of those files / last edit-tool call.
+- Pass when every required skill ran after the reset point **and** `code-review` ran after the
+  last edit.
+- Blocks `git commit` (also `rtk git commit`) and pushes back once per prompt when finishing.
+- Any uncommitted file counts, including your own unrelated work in progress.
 - `extensions/packages.json` / `scripts/install-packages.js` — extensions that are **installed
   as-is** from npm/GitHub (not vendored here), bulk-installed via `pi install <source>`.
 - `themes/` — pi themes, also declared via the `"pi"` field. Currently: `nightowl` (copied from

@@ -1,49 +1,47 @@
-/**
- * pi extension: every change must go through the required skills.
- *
- * - tool_call (bash): blocks `git commit` until the skills have run.
- * - agent_before_settle: stops pi from finishing with unreviewed changes
- *   (sends one nudge per user prompt, so it can't loop).
- *
- * Scope: only what happened after the latest git commit (HEAD's commit time)
- * counts. Skill runs before that are ignored. Using git, not the session log,
- * means commits made anywhere (agent, `!` prompt, another terminal) reset it.
- *
- * Rules (when files were edited since that commit):
- *   1. Every skill in REQUIRED must have run since that commit.
- *   2. code-review must have run after the last edit.
- *
- * A skill counts if the user typed /skill:<name> (expands to <skill name="...">)
- * or the model read <name>/SKILL.md with the read tool.
- *
- * Mirror of ../hooks/require-skills.py (Claude Code). Keep both in sync.
- */
 import { execFileSync } from "node:child_process";
+import { existsSync, statSync } from "node:fs";
+import { join } from "node:path";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 
 const REQUIRED = ["codebase-design", "grill-me", "improve-codebase-architecture", "naming-analyzer", "code-review"];
 const REVIEW = "code-review";
 
 const EDIT_TOOLS = new Set(["edit", "write"]);
-// `git` must be the command itself (start of line or after ; & | && ||), not text inside a string.
-const COMMIT_RE = /(?:^|[;&|\n(]\s*)git(?:\s+-[cC]\s+\S+|\s+--?[\w-]+(?:=\S+)?)*\s+commit\b/;
+const COMMIT_RE =
+	/(?:^|[;&|\n(]\s*)(?:rtk\s+(?:proxy\s+)?)?git(?:\s+-[cC]\s+\S+|\s+--?[\w-]+(?:=\S+)?)*\s+commit\b/;
 const SKILL_BLOCK_RE = /^<skill name="([^"]+)"/;
 const SKILL_FILE_RE = /([^/\\]+)[/\\]SKILL\.md$/;
 
-type Ev = { kind: "edit" | "skill"; name?: string };
+type Ev = { at: number; kind: "edit" | "skill"; name?: string };
 
-/** Unix ms of HEAD's commit, or 0 when not in a git repo / no commits. */
-function lastCommitTime(cwd: string): number {
+function git(cwd: string, ...args: string[]): string | undefined {
 	try {
-		const out = execFileSync("git", ["-C", cwd, "log", "-1", "--format=%ct"], {
+		return execFileSync("git", ["-C", cwd, ...args], {
 			encoding: "utf8",
 			stdio: ["ignore", "pipe", "ignore"],
 			timeout: 5000,
 		});
-		return (Number(out.trim()) || 0) * 1000;
 	} catch {
-		return 0;
+		return undefined;
 	}
+}
+
+function lastCommitTime(cwd: string): number {
+	return (Number(git(cwd, "log", "-1", "--format=%ct")?.trim()) || 0) * 1000;
+}
+
+function newestUncommittedChange(cwd: string): number {
+	const root = git(cwd, "rev-parse", "--show-toplevel")?.trim();
+	const status = git(cwd, "status", "--porcelain", "-z", "--untracked-files=all");
+	if (!root || status === undefined) return 0;
+	let newest = 0;
+	for (const record of status.split("\0")) {
+		const path = join(root, record.slice(3));
+		if (record.length > 3 && existsSync(path) && statSync(path).isFile()) {
+			newest = Math.max(newest, statSync(path).mtimeMs);
+		}
+	}
+	return newest;
 }
 
 function textOf(content: unknown): string {
@@ -56,18 +54,19 @@ function readEvents(entries: any[], since: number): Ev[] {
 	const events: Ev[] = [];
 	for (const entry of entries) {
 		if (entry?.type !== "message") continue;
-		if ((Date.parse(entry.timestamp) || 0) <= since) continue;
+		const at = Date.parse(entry.timestamp) || 0;
+		if (at <= since) continue;
 		const msg = entry.message ?? {};
 		if (msg.role === "user") {
 			const m = textOf(msg.content).match(SKILL_BLOCK_RE);
-			if (m) events.push({ kind: "skill", name: m[1] });
+			if (m) events.push({ at, kind: "skill", name: m[1] });
 		} else if (msg.role === "assistant" && Array.isArray(msg.content)) {
 			for (const b of msg.content) {
 				if (b?.type !== "toolCall") continue;
-				if (EDIT_TOOLS.has(b.name)) events.push({ kind: "edit" });
+				if (EDIT_TOOLS.has(b.name)) events.push({ at, kind: "edit" });
 				else if (b.name === "read") {
 					const m = String(b.arguments?.path ?? "").match(SKILL_FILE_RE);
-					if (m) events.push({ kind: "skill", name: m[1] });
+					if (m) events.push({ at, kind: "skill", name: m[1] });
 				}
 			}
 		}
@@ -75,13 +74,13 @@ function readEvents(entries: any[], since: number): Ev[] {
 	return events;
 }
 
-function missingSkills(events: Ev[]): string[] {
-	let lastEdit = -1;
-	events.forEach((e, i) => e.kind === "edit" && (lastEdit = i));
-	if (lastEdit < 0) return [];
-	const ran = new Set(events.filter((e) => e.kind === "skill").map((e) => e.name));
+function missingSkills(events: Ev[], lastFileChange = 0): string[] {
+	const lastEdit = Math.max(lastFileChange, ...events.filter((e) => e.kind === "edit").map((e) => e.at));
+	if (!lastEdit) return [];
+	const skillRuns = events.filter((e) => e.kind === "skill");
+	const ran = new Set(skillRuns.map((e) => e.name));
 	const missing = REQUIRED.filter((s) => !ran.has(s));
-	const reviewedAfterEdit = events.slice(lastEdit + 1).some((e) => e.kind === "skill" && e.name === REVIEW);
+	const reviewedAfterEdit = skillRuns.some((e) => e.name === REVIEW && e.at >= lastEdit);
 	if (ran.has(REVIEW) && !reviewedAfterEdit) missing.push(`${REVIEW} (again: files changed after the last review)`);
 	return missing;
 }
@@ -95,7 +94,8 @@ function message(missing: string[]): string {
 }
 
 function check(ctx: { cwd: string; sessionManager: { getBranch(): any[] } }): string[] {
-	return missingSkills(readEvents(ctx.sessionManager.getBranch(), lastCommitTime(ctx.cwd)));
+	const events = readEvents(ctx.sessionManager.getBranch(), lastCommitTime(ctx.cwd));
+	return missingSkills(events, newestUncommittedChange(ctx.cwd));
 }
 
 export default function (pi: ExtensionAPI) {
