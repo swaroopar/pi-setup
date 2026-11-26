@@ -21,7 +21,7 @@
 import { execFileSync } from "node:child_process";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 
-const REQUIRED = ["codebase-design", "grill-me", "improve-codebase-architecture", "code-review"];
+const REQUIRED = ["codebase-design", "grill-me", "improve-codebase-architecture", "naming-analyzer", "code-review"];
 const REVIEW = "code-review";
 
 const EDIT_TOOLS = new Set(["edit", "write"]);

@@ -9,7 +9,7 @@ Modeled on [mitsuhiko/agent-stuff](https://github.com/mitsuhiko/agent-stuff) (pu
 ## Layout
 
 - `skills/` — slash-command skills (`SKILL.md` + supporting files), installed via the `"pi"` field
-  in `package.json`. Currently: `planner`, `beader`, `shipper`, `dependabot`, `delete-comments` (`shipper` and `dependabot` share
+  in `package.json`. Currently: `planner`, `beader`, `shipper`, `dependabot`, `delete-comments`, `naming-analyzer` (vendored from softaworks/agent-toolkit; `shipper` and `dependabot` share
   `skills/lib/monitor-mr-github.sh`/`monitor-mr-gitlab.sh` for watching MR/PR CI status — see
   `skills/lib/README.md`). `scripts/install-skills.sh` additionally copies `skills/` into the flat,
   non-package skill directories `~/.claude/skills/` (Claude Code) and `~/.agents/skills/` (the
@@ -90,7 +90,7 @@ details.
 ## Status
 
 - [x] Workflows (`bead_shipper`, `bead_shipper_batch`)
-- [x] Skills (`planner`, `beader`, `shipper`, `dependabot`, `delete-comments`)
+- [x] Skills (`planner`, `beader`, `shipper`, `dependabot`, `delete-comments`, `naming-analyzer`)
 - [x] Extensions installed from npm/GitHub (`extensions/packages.json` + `install-packages.js`)
 - [x] Extensions ported into this repo (`require-skills.ts`, `no-comments.ts`)
 - [x] Theme (`nightowl`)

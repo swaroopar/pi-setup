@@ -21,7 +21,7 @@ import subprocess
 import sys
 from datetime import datetime
 
-REQUIRED = ["codebase-design", "grill-me", "improve-codebase-architecture", "code-review"]
+REQUIRED = ["codebase-design", "grill-me", "improve-codebase-architecture", "naming-analyzer", "code-review"]
 REVIEW = "code-review"
 
 EDIT_TOOLS = {"Edit", "Write", "MultiEdit", "NotebookEdit"}

@@ -8,11 +8,12 @@ Every code change goes through these skills, **always in this order**:
 2. `grill-me` — before coding: stress-test the plan.
 3. `improve-codebase-architecture` — before coding: look for deepening opportunities.
 4. Make the change.
-5. `code-review` — after the last edit. Edit again → run `code-review` again.
+5. `naming-analyzer` — after coding: check the names in the changed code. Apply renames.
+6. `code-review` — after the last edit. Edit again → run `code-review` again.
 
 Rules:
 
-- A commit resets the cycle. The next change needs all four again.
+- A commit resets the cycle. The next change needs all five again.
 - If you can't invoke a skill yourself, ask the user to run it
   (Claude Code: `/<skill>`, pi: `/skill:<skill>`).
 - Hooks enforce this: `git commit` is blocked and finishing a turn is
