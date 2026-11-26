@@ -18,6 +18,8 @@ Rules:
 - `grill-me` comes before **any** file change. Run it, then stop and wait for the user's answers.
 - When a skill asks the user something, end your turn and wait. Don't start the next skill
   until the current one is finished.
+- When you run a required skill through a workflow or sub-agents, name the run after the skill
+  (e.g. `code-review-session-diff`), so the hooks count it.
 - If you can't invoke a skill yourself, ask the user to run it
   (Claude Code: `/<skill>`, pi: `/skill:<skill>`).
 - Hooks enforce this (rules in `policy/require-skills.ts`; adapters `hooks/require-skills.ts` for Claude Code, `extensions/require-skills.ts` for pi):

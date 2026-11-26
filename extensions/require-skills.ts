@@ -2,6 +2,7 @@ import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import {
 	blockReasonForStop,
 	blockReasonForToolUse,
+	delegatedSkill,
 	type EditedPaths,
 	type SessionEvent,
 	type SessionInputs,
@@ -11,6 +12,7 @@ import { gitWorkspace } from "../policy/workspace.ts";
 import { blockFailure, unifiedEditSections } from "./lib/pi-edit.ts";
 
 const EDIT_TOOLS = new Set(["edit", "write"]);
+const DELEGATION_TOOLS = new Set(["Agent", "workflow"]);
 const SKILL_BLOCK_RE = /^<skill name="([^"]+)"/;
 const SKILL_FILE_RE = /([^/\\]+)[/\\]SKILL\.md$/;
 
@@ -56,6 +58,9 @@ function sessionEvents(entries: any[]): SessionEvent[] {
 				else if (block.name === "read" && !failed.has(block.id)) {
 					const skill = String(block.arguments?.path ?? "").match(SKILL_FILE_RE);
 					if (skill) events.push({ at, kind: "skill", name: skill[1] });
+				} else if (DELEGATION_TOOLS.has(block.name) && !failed.has(block.id)) {
+					const skill = delegatedSkill(block.arguments);
+					if (skill) events.push({ at, kind: "skill", name: skill });
 				}
 			}
 		}

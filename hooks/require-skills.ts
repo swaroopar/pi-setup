@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import {
 	blockReasonForStop,
 	blockReasonForToolUse,
+	delegatedSkill,
 	type EditedPaths,
 	type SessionEvent,
 	type SessionInputs,
@@ -11,6 +12,7 @@ import { gitWorkspace } from "../policy/workspace.ts";
 import { blockStop, denyToolUse, runHook } from "./lib/claude-io.ts";
 
 const EDIT_TOOLS = new Set(["Edit", "Write", "MultiEdit", "NotebookEdit"]);
+const DELEGATION_TOOLS = new Set(["Agent", "Workflow"]);
 const EDIT_MCP_RE = /^mcp__.*__(apply_patch|create_new_file|replace_\w+|edit_\w+|write_\w+)$/;
 const SLASH_COMMAND_RE = /<command-name>\/?([\w:.-]+)<\/command-name>/g;
 
@@ -81,6 +83,9 @@ function transcriptEvents(path: string): SessionEvent[] {
 				if (EDIT_TOOLS.has(name) || EDIT_MCP_RE.test(name)) events.push({ at, kind: "edit", paths: editedPaths(block.input) });
 				else if (name === "Skill" && !failed.has(block.id)) {
 					events.push({ at, kind: "skill", name: skillName(String(block.input?.skill ?? "")) });
+				} else if (DELEGATION_TOOLS.has(name) && !failed.has(block.id)) {
+					const skill = delegatedSkill(block.input);
+					if (skill) events.push({ at, kind: "skill", name: skill });
 				}
 			}
 		}

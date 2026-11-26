@@ -25,6 +25,12 @@ tree look "changed" forever, and refused skill calls were counted as runs.
 - **Changed files**: tracked files with uncommitted changes always count; untracked files only
   when modified after the window start.
 - **Failed calls**: a skill call whose result is an error (refused, denied, failed) doesn't count.
+- **Delegated runs**: a workflow (`meta.name`) or sub-agent (`description`) whose name starts with a
+  required skill's name counts as that skill (`code-review-session-diff` → `code-review`; case and
+  spaces/`_`/`-` don't matter, but `Code review: x` doesn't count). Agents
+  often load a skill once and later run its steps through sub-agents; without this the hook would
+  demand a duplicate run. Known gaps: a background run that fails later still counts; a delegated
+  `grill-me` still needs a user reply before edits are allowed.
 - **Grill gate**: unlocked only by a successful `grill-me` run followed by a real user reply.
 - **Stop / settle**: not pushed back in a turn where a required skill or `grilling` ran, because
   the agent may be waiting on the user.

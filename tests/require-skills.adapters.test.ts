@@ -85,6 +85,14 @@ describe("Claude Code adapter", () => {
 		});
 		assert.match(result, /deny/);
 	});
+	test("a workflow named after code-review counts as the review", () => {
+		const workflow = toolUse(AFTER_COMMIT + 60, "Workflow", { script: "export const meta = { name: 'code-review-session-diff' }\n" }, "w");
+		assert.equal(commitHook(makeRepo({ modifiedAt: AFTER_COMMIT + 50 }), [...allSkills(ON_BRANCH), workflow]), "");
+	});
+	test("a failed sub-agent run does not count as the review", () => {
+		const agent = toolUse(AFTER_COMMIT + 60, "Agent", { description: "Code review: standards" }, "a");
+		assert.match(commitHook(makeRepo({ modifiedAt: AFTER_COMMIT + 50 }), [...allSkills(ON_BRANCH), agent, toolError(AFTER_COMMIT + 61, "a")]), /code-review/);
+	});
 	test("stop_hook_active never blocks twice", () => {
 		assert.equal(stopHook(makeRepo({ modifiedAt: AFTER_COMMIT + 50 }), [prompt(AFTER_COMMIT)], true), "");
 	});
@@ -139,6 +147,15 @@ describe("pi adapter", async () => {
 	});
 	test("shell writes outside the repo are allowed before grilling", async () => {
 		assert.equal(await toolCall(makeRepo(), [prompt(AFTER_COMMIT)], "bash", { command: "mkdir -p /tmp/pi-setup-x && mv ~/a ~/b" }), undefined);
+	});
+	test("a workflow named after code-review counts as the review", async () => {
+		const read = (at: number, name: string) => readSkill(at, name, name);
+		const before = [read(ON_BRANCH, "codebase-design"), read(ON_BRANCH + 1, "grill-me"), prompt(ON_BRANCH + 2), read(ON_BRANCH + 3, "improve-codebase-architecture"), read(ON_BRANCH + 4, "naming-analyzer"), read(ON_BRANCH + 5, "code-review")];
+		const edit = call(AFTER_COMMIT + 40, "edit", { path: "f.py", edits: [] }, "e");
+		const workflow = call(AFTER_COMMIT + 60, "workflow", { script: "export const meta = { name: 'code-review-session-diff', description: 'x' }" }, "w");
+		const repo = makeRepo({ modifiedAt: AFTER_COMMIT + 50 });
+		assert.ok(await toolCall(repo, [...before, edit], "bash", { command: "git commit -m y" }));
+		assert.equal(await toolCall(repo, [...before, edit, workflow], "bash", { command: "git commit -m y" }), undefined);
 	});
 	test("settle nudges only once per prompt", async () => {
 		const repo = makeRepo({ modifiedAt: AFTER_COMMIT + 50 });

@@ -3,6 +3,7 @@ import { describe, test } from "node:test";
 import {
 	blockReasonForStop,
 	blockReasonForToolUse,
+	delegatedSkill,
 	GRILL_FIRST_MESSAGE,
 	type SessionEvent,
 	type ToolAction,
@@ -69,5 +70,27 @@ describe("require-skills rules", () => {
 			if (expected instanceof RegExp) assert.match(reason ?? "", expected);
 			else assert.equal(reason, expected);
 		});
+	}
+});
+
+describe("delegatedSkill", () => {
+	const cases: [input: object, expected: string | undefined][] = [
+		[{ script: "export const meta = { name: 'code-review-session-diff' }" }, "code-review"],
+		[{ script: "export const meta = {\n  name: \"naming-analyzer\",\n}" }, "naming-analyzer"],
+		[{ script: "export const meta = { name: 'arch-review' }", description: "code-review" }, undefined],
+		[{ description: "Code review standards" }, "code-review"],
+		[{ description: "code_review" }, "code-review"],
+		[{ description: "Code review: standards" }, undefined],
+		[{ description: "code-reviewer pass" }, undefined],
+		[{ description: "grill-me" }, "grill-me"],
+		[{ description: "Fix the parser" }, undefined],
+		[{ script: "meta = { description: \"run name: 'code-review' later\", name: 'deploy' }" }, undefined],
+		[{ script: "meta = { phases: [{ title: 'a' }], name: 'code-review' }" }, "code-review"],
+		[{ script: "const meta: WorkflowMeta = { name: 'code-review' }" }, "code-review"],
+		[{ script: "meta = { name: \"code-review 'x'\" }" }, "code-review"],
+		[{}, undefined],
+	];
+	for (const [input, expected] of cases) {
+		test(JSON.stringify(input), () => assert.equal(delegatedSkill(input), expected));
 	}
 });

@@ -55,6 +55,8 @@ Modeled on [mitsuhiko/agent-stuff](https://github.com/mitsuhiko/agent-stuff) (pu
   (edits elsewhere, like `~/.pi/agent/settings.json`, don't count).
 - Last edit time = newest mtime of those files / last edit-tool call.
 - Skill calls that errored or were refused don't count.
+- A workflow or sub-agent named after a required skill counts as that skill
+  (`code-review-session-diff` → `code-review`).
 - Pass when every required skill ran inside the window **and** `code-review` ran after the
   last edit.
 - Blocks `git commit` (also `rtk git commit`) and pushes back once per prompt when finishing.

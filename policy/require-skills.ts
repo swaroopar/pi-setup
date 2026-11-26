@@ -33,6 +33,16 @@ export const GRILL_FIRST_MESSAGE =
 	"No changes before grilling. Run the grill-me skill first and wait for the user's answers " +
 	"before changing any file in this repository.";
 
+const WORKFLOW_NAME_RE = /\bmeta\s*(?::\s*\w+\s*)?=\s*(?=\{)[\s\S]*?[{,]\s*name\s*:\s*(['"`])((?:(?!\1)[^\n])+)\1/;
+const normalizedLabel = (label: string) => label.trim().toLowerCase().replace(/[\s_-]+/g, "-");
+
+export function delegatedSkill(input: { script?: unknown; description?: unknown }): string | undefined {
+	const workflowName = typeof input?.script === "string" ? input.script.match(WORKFLOW_NAME_RE)?.[2] : undefined;
+	const label = workflowName ?? (typeof input?.description === "string" ? input.description : "");
+	const normalized = normalizedLabel(label);
+	return REQUIRED_SKILLS.find((skill) => normalized === skill || normalized.startsWith(`${skill}-`));
+}
+
 function mayTouchWorkspace(paths: EditedPaths, workspace: Workspace): boolean {
 	return paths === "unknown" || paths.some((path) => workspace.contains(path));
 }
