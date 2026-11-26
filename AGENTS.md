@@ -14,11 +14,15 @@ Every code change goes through these skills, **always in this order**:
 Rules:
 
 - A commit resets the cycle. The next change needs all five again.
+- `grill-me` comes before **any** file change. Run it, then stop and wait for the user's answers.
+- When a skill asks the user something, end your turn and wait. Don't start the next skill
+  until the current one is finished.
 - If you can't invoke a skill yourself, ask the user to run it
   (Claude Code: `/<skill>`, pi: `/skill:<skill>`).
-- Hooks enforce this: `git commit` is blocked and finishing a turn is
-  pushed back until the skills have run
-  (`hooks/require-skills.py` for Claude Code, `extensions/require-skills.ts` for pi).
+- Hooks enforce this (`hooks/require-skills.py` for Claude Code, `extensions/require-skills.ts` for pi):
+  - file edits and file-writing shell commands are blocked until `grill-me` ran and the user answered;
+  - `git commit` is blocked until all five ran;
+  - finishing a turn is pushed back once, unless a skill ran in that turn (it may be waiting on you).
 
 ## No code comments
 

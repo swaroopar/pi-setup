@@ -9,7 +9,7 @@ SETTINGS = os.path.expanduser("~/.claude/settings.json")
 
 WANTED = {
     "PreToolUse": [
-        ("Bash", "require-skills.py"),
+        ("Bash|Edit|Write|MultiEdit|NotebookEdit", "require-skills.py"),
         ("Edit|Write|MultiEdit", "no-comments.py"),
     ],
     "Stop": [

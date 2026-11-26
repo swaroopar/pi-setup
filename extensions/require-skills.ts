@@ -1,18 +1,28 @@
 import { execFileSync } from "node:child_process";
-import { existsSync, statSync } from "node:fs";
-import { join } from "node:path";
+import { existsSync, realpathSync, statSync } from "node:fs";
+import { dirname, isAbsolute, join, resolve, sep } from "node:path";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 
 const REQUIRED = ["codebase-design", "grill-me", "improve-codebase-architecture", "naming-analyzer", "code-review"];
 const REVIEW = "code-review";
+const GRILL = "grill-me";
 
 const EDIT_TOOLS = new Set(["edit", "write"]);
-const COMMIT_RE =
-	/(?:^|[;&|\n(]\s*)(?:rtk\s+(?:proxy\s+)?)?git(?:\s+-[cC]\s+\S+|\s+--?[\w-]+(?:=\S+)?)*\s+commit\b/;
+const CMD_START = String.raw`(?:^|[;&|\n(]\s*)(?:rtk\s+(?:proxy\s+)?)?(?:sudo\s+)?`;
+const COMMIT_RE = new RegExp(CMD_START + String.raw`git(?:\s+-[cC]\s+\S+|\s+--?[\w-]+(?:=\S+)?)*\s+commit\b`);
+const WRITE_CMD_RE = new RegExp(
+	CMD_START +
+		String.raw`(?:sed\s+(?:[^\s;&|]+\s+)*?-\w*i|perl\s+-\w*i|tee\b|mv\b|cp\b|rm\b|touch\b|mkdir\b|ln\b|truncate\b|patch\b|` +
+		String.raw`git\s+(?:apply|checkout|restore|reset|stash|mv|rm|am|cherry-pick|merge|rebase|pull)\b)`,
+);
+const HEREDOC_RE = /<<-?\s*['"]?(\w+)['"]?[^\n]*\n[\s\S]*?\n\1(?=\n|$)/g;
+const QUOTED_RE = /'[^']*'|"[^"]*"/g;
+const REDIRECT_RE = /(?<![0-9&>])>>?\s*(?!&|\/dev\/)([^\s;&|)]+)/g;
+const SCRATCH_PREFIXES = ["/tmp", "/private/tmp", "/var/folders"];
 const SKILL_BLOCK_RE = /^<skill name="([^"]+)"/;
 const SKILL_FILE_RE = /([^/\\]+)[/\\]SKILL\.md$/;
 
-type Ev = { at: number; kind: "edit" | "skill"; name?: string };
+type Ev = { at: number; kind: "edit" | "skill" | "prompt"; name?: string };
 
 function git(cwd: string, ...args: string[]): string | undefined {
 	try {
@@ -30,6 +40,10 @@ function lastCommitTime(cwd: string): number {
 	return (Number(git(cwd, "log", "-1", "--format=%ct")?.trim()) || 0) * 1000;
 }
 
+function workspaceRoot(cwd: string): string {
+	return git(cwd, "rev-parse", "--show-toplevel")?.trim() || cwd;
+}
+
 function newestUncommittedChange(cwd: string): number {
 	const root = git(cwd, "rev-parse", "--show-toplevel")?.trim();
 	const status = git(cwd, "status", "--porcelain", "-z", "--untracked-files=all");
@@ -42,6 +56,33 @@ function newestUncommittedChange(cwd: string): number {
 		}
 	}
 	return newest;
+}
+
+function realish(path: string): string {
+	let dir = path;
+	while (!existsSync(dir) && dirname(dir) !== dir) dir = dirname(dir);
+	return join(realpathSync(dir), path.slice(dir.length));
+}
+
+function insideWorkspace(path: string, cwd: string): boolean {
+	const root = realish(workspaceRoot(cwd));
+	const target = realish(isAbsolute(path) ? path : resolve(cwd, path));
+	return target === root || target.startsWith(root + sep);
+}
+
+function bashWrites(command: string): boolean {
+	const bare = command.replace(HEREDOC_RE, "").replace(QUOTED_RE, "''");
+	if (WRITE_CMD_RE.test(bare)) return true;
+	return [...bare.matchAll(REDIRECT_RE)].some((m) => !SCRATCH_PREFIXES.some((p) => m[1].startsWith(p)));
+}
+
+function editedPaths(toolName: string, input: any): string[] {
+	if (toolName === "write") return [String(input?.path ?? "")];
+	if (toolName !== "edit") return [];
+	if (typeof input?.text === "string") {
+		return [...input.text.matchAll(/^(?:\[(.+)\]|\*\*\* (?:Add|Update|Delete) File: (.+))$/gm)].map((m) => (m[1] ?? m[2]).trim());
+	}
+	return [String(input?.path ?? "")];
 }
 
 function textOf(content: unknown): string {
@@ -58,6 +99,7 @@ function readEvents(entries: any[], since: number): Ev[] {
 		if (at <= since) continue;
 		const msg = entry.message ?? {};
 		if (msg.role === "user") {
+			events.push({ at, kind: "prompt" });
 			const m = textOf(msg.content).match(SKILL_BLOCK_RE);
 			if (m) events.push({ at, kind: "skill", name: m[1] });
 		} else if (msg.role === "assistant" && Array.isArray(msg.content)) {
@@ -85,6 +127,16 @@ function missingSkills(events: Ev[], lastFileChange = 0): string[] {
 	return missing;
 }
 
+function grillAnswered(events: Ev[]): boolean {
+	const firstGrill = events.findIndex((e) => e.kind === "skill" && e.name === GRILL);
+	return firstGrill >= 0 && events.slice(firstGrill + 1).some((e) => e.kind === "prompt");
+}
+
+function skillRanThisTurn(events: Ev[]): boolean {
+	const lastPrompt = events.map((e) => e.kind).lastIndexOf("prompt");
+	return events.slice(lastPrompt + 1).some((e) => e.kind === "skill");
+}
+
 function message(missing: string[]): string {
 	return (
 		`Changes are not done. Run these skills first, in this order: ${missing.join(", ")}. ` +
@@ -93,9 +145,19 @@ function message(missing: string[]): string {
 	);
 }
 
-function check(ctx: { cwd: string; sessionManager: { getBranch(): any[] } }): string[] {
-	const events = readEvents(ctx.sessionManager.getBranch(), lastCommitTime(ctx.cwd));
-	return missingSkills(events, newestUncommittedChange(ctx.cwd));
+const GRILL_FIRST =
+	"No changes before grilling. Run the grill-me skill first and wait for the user's answers " +
+	"before changing any file in this repository.";
+
+type Ctx = { cwd: string; sessionManager: { getBranch(): any[] } };
+
+function sessionEvents(ctx: Ctx): Ev[] {
+	return readEvents(ctx.sessionManager.getBranch(), lastCommitTime(ctx.cwd));
+}
+
+function changesWorkspace(toolName: string, input: any, cwd: string): boolean {
+	if (toolName === "bash") return bashWrites(String(input?.command ?? ""));
+	return editedPaths(toolName, input).some((p) => p && insideWorkspace(p, cwd));
 }
 
 export default function (pi: ExtensionAPI) {
@@ -105,15 +167,22 @@ export default function (pi: ExtensionAPI) {
 	});
 
 	pi.on("tool_call", async (event, ctx) => {
-		if (event.toolName !== "bash") return;
-		if (!COMMIT_RE.test(String((event.input as any)?.command ?? ""))) return;
-		const missing = check(ctx);
-		if (missing.length) return { block: true, reason: message(missing) };
+		const input = event.input as any;
+		if (event.toolName === "bash" && COMMIT_RE.test(String(input?.command ?? ""))) {
+			const missing = missingSkills(sessionEvents(ctx), newestUncommittedChange(ctx.cwd));
+			if (missing.length) return { block: true, reason: message(missing) };
+			return;
+		}
+		if (changesWorkspace(event.toolName, input, ctx.cwd) && !grillAnswered(sessionEvents(ctx))) {
+			return { block: true, reason: GRILL_FIRST };
+		}
 	});
 
 	pi.on("agent_before_settle", async (event, ctx) => {
 		if (nudged) return;
-		const missing = check(ctx);
+		const events = sessionEvents(ctx);
+		if (skillRanThisTurn(events)) return;
+		const missing = missingSkills(events, newestUncommittedChange(ctx.cwd));
 		if (!missing.length) return;
 		nudged = true;
 		return {

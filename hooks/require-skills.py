@@ -8,13 +8,27 @@ from datetime import datetime
 
 REQUIRED = ["codebase-design", "grill-me", "improve-codebase-architecture", "naming-analyzer", "code-review"]
 REVIEW = "code-review"
+GRILL = "grill-me"
 
 EDIT_TOOLS = {"Edit", "Write", "MultiEdit", "NotebookEdit"}
 EDIT_MCP_RE = re.compile(r"^mcp__.*__(apply_patch|create_new_file|replace_\w+|edit_\w+|write_\w+)$")
-COMMIT_RE = re.compile(
-    r"(?:^|[;&|\n(]\s*)(?:rtk\s+(?:proxy\s+)?)?git(?:\s+-[cC]\s+\S+|\s+--?[\w-]+(?:=\S+)?)*\s+commit\b"
+CMD_START = r"(?:^|[;&|\n(]\s*)(?:rtk\s+(?:proxy\s+)?)?(?:sudo\s+)?"
+COMMIT_RE = re.compile(CMD_START + r"git(?:\s+-[cC]\s+\S+|\s+--?[\w-]+(?:=\S+)?)*\s+commit\b")
+WRITE_CMD_RE = re.compile(
+    CMD_START
+    + r"(?:sed\s+(?:[^\s;&|]+\s+)*?-\w*i|perl\s+-\w*i|tee\b|mv\b|cp\b|rm\b|touch\b|mkdir\b|ln\b|truncate\b|patch\b|"
+    r"git\s+(?:apply|checkout|restore|reset|stash|mv|rm|am|cherry-pick|merge|rebase|pull)\b)"
 )
+HEREDOC_RE = re.compile(r"<<-?\s*['\"]?(\w+)['\"]?[^\n]*\n.*?\n\1(?=\n|$)", re.S)
+QUOTED_RE = re.compile(r"'[^']*'|\"[^\"]*\"")
+REDIRECT_RE = re.compile(r"(?<![0-9&>])>>?\s*(?!&|/dev/)([^\s;&|)]+)")
+SCRATCH_PREFIXES = ("/tmp", "/private/tmp", "/var/folders")
 SLASH_RE = re.compile(r"<command-name>/?([\w:.-]+)</command-name>")
+
+GRILL_FIRST = (
+    "No changes before grilling. Run the grill-me skill first and wait for the user's answers "
+    "before changing any file in this repository."
+)
 
 
 def short(name):
@@ -34,6 +48,11 @@ def last_commit_time(cwd):
     return int(out.strip()) if out and out.strip().isdigit() else 0
 
 
+def workspace_root(cwd):
+    root = git(cwd, "rev-parse", "--show-toplevel")
+    return (root or "").strip() or cwd or "."
+
+
 def newest_uncommitted_change(cwd):
     root = git(cwd, "rev-parse", "--show-toplevel")
     status = git(cwd, "status", "--porcelain", "-z", "--untracked-files=all")
@@ -47,11 +66,37 @@ def newest_uncommitted_change(cwd):
     return newest
 
 
+def inside_workspace(path, cwd):
+    root = os.path.realpath(workspace_root(cwd))
+    target = os.path.realpath(os.path.join(cwd or ".", path))
+    return target == root or target.startswith(root + os.sep)
+
+
+def bash_writes(command):
+    bare = QUOTED_RE.sub("''", HEREDOC_RE.sub("", command))
+    if WRITE_CMD_RE.search(bare):
+        return True
+    return any(not t.startswith(SCRATCH_PREFIXES) for t in REDIRECT_RE.findall(bare))
+
+
+def changes_workspace(tool, inp, cwd):
+    if tool == "Bash":
+        return bash_writes(inp.get("command", ""))
+    path = inp.get("file_path") or inp.get("notebook_path") or ""
+    return tool in EDIT_TOOLS and bool(path) and inside_workspace(path, cwd)
+
+
 def entry_time(e):
     try:
         return datetime.fromisoformat(e["timestamp"].replace("Z", "+00:00")).timestamp()
     except (KeyError, ValueError, AttributeError):
         return 0
+
+
+def is_prompt(e, blocks):
+    if e.get("type") != "user" or e.get("isMeta"):
+        return False
+    return not any(isinstance(b, dict) and b.get("type") == "tool_result" for b in blocks)
 
 
 def read_events(path, since):
@@ -70,6 +115,8 @@ def read_events(path, since):
             continue
         content = (e.get("message") or {}).get("content")
         blocks = content if isinstance(content, list) else [{"type": "text", "text": content or ""}]
+        if is_prompt(e, blocks):
+            events.append((at, "prompt", None))
         for b in blocks:
             if not isinstance(b, dict):
                 continue
@@ -97,6 +144,17 @@ def missing_skills(events, last_file_change=0):
     return missing
 
 
+def grill_answered(events):
+    grills = [i for i, (_, k, n) in enumerate(events) if k == "skill" and n == GRILL]
+    return bool(grills) and any(k == "prompt" for _, k, _ in events[grills[0] + 1:])
+
+
+def skill_ran_this_turn(events):
+    prompts = [i for i, (_, k, _) in enumerate(events) if k == "prompt"]
+    start = prompts[-1] + 1 if prompts else 0
+    return any(k == "skill" for _, k, _ in events[start:])
+
+
 def message(missing):
     return (
         "Changes are not done. Run these skills first, in this order: "
@@ -106,33 +164,40 @@ def message(missing):
     )
 
 
-def check(data):
-    cwd = data.get("cwd")
-    since = last_commit_time(cwd)
-    events = read_events(data.get("transcript_path", ""), since)
-    return missing_skills(events, newest_uncommitted_change(cwd))
+def session_events(data):
+    return read_events(data.get("transcript_path", ""), last_commit_time(data.get("cwd")))
+
+
+def deny(reason):
+    print(json.dumps({"hookSpecificOutput": {
+        "hookEventName": "PreToolUse",
+        "permissionDecision": "deny",
+        "permissionDecisionReason": reason,
+    }}))
 
 
 def main():
     data = json.load(sys.stdin)
     event = data.get("hook_event_name")
+    cwd = data.get("cwd")
 
     if event == "PreToolUse":
-        if not COMMIT_RE.search((data.get("tool_input") or {}).get("command", "")):
-            return
-        missing = check(data)
-        if missing:
-            print(json.dumps({"hookSpecificOutput": {
-                "hookEventName": "PreToolUse",
-                "permissionDecision": "deny",
-                "permissionDecisionReason": message(missing),
-            }}))
+        tool, inp = data.get("tool_name"), data.get("tool_input") or {}
+        if tool == "Bash" and COMMIT_RE.search(inp.get("command", "")):
+            missing = missing_skills(session_events(data), newest_uncommitted_change(cwd))
+            if missing:
+                deny(message(missing))
+        elif changes_workspace(tool, inp, cwd) and not grill_answered(session_events(data)):
+            deny(GRILL_FIRST)
         return
 
     if event == "Stop":
         if data.get("stop_hook_active"):
             return
-        missing = check(data)
+        events = session_events(data)
+        if skill_ran_this_turn(events):
+            return
+        missing = missing_skills(events, newest_uncommitted_change(cwd))
         if missing:
             print(json.dumps({"decision": "block", "reason": message(missing)}))
 

@@ -9,7 +9,8 @@ Modeled on [mitsuhiko/agent-stuff](https://github.com/mitsuhiko/agent-stuff) (pu
 ## Layout
 
 - `skills/` — slash-command skills (`SKILL.md` + supporting files), installed via the `"pi"` field
-  in `package.json`. Currently: `planner`, `beader`, `shipper`, `dependabot`, `delete-comments`, `naming-analyzer` (vendored from softaworks/agent-toolkit; `shipper` and `dependabot` share
+  in `package.json`. Currently: `planner`, `beader`, `shipper`, `dependabot`, `delete-comments`, `naming-analyzer` (vendored from softaworks/agent-toolkit), `grill-me`,
+  `grilling`, `improve-codebase-architecture` (vendored from mattpocock/skills, see each `SOURCE.md`; `shipper` and `dependabot` share
   `skills/lib/monitor-mr-github.sh`/`monitor-mr-gitlab.sh` for watching MR/PR CI status — see
   `skills/lib/README.md`). `scripts/install-skills.sh` additionally copies `skills/` into the flat,
   non-package skill directories `~/.claude/skills/` (Claude Code) and `~/.agents/skills/` (the
@@ -33,6 +34,12 @@ Modeled on [mitsuhiko/agent-stuff](https://github.com/mitsuhiko/agent-stuff) (pu
 - Pass when every required skill ran after the reset point **and** `code-review` ran after the
   last edit.
 - Blocks `git commit` (also `rtk git commit`) and pushes back once per prompt when finishing.
+- Finishing is **not** pushed back when a skill ran in that turn: the skill may be waiting on
+  the user's answers.
+- Before any change: edit tools on files inside the repo, and shell commands that write files
+  (`sed -i`, `perl -i`, `>`/`>>`, `tee`, `mv`, `cp`, `rm`, `touch`, `mkdir`, `git apply/checkout/...`),
+  are blocked until `grill-me` ran **and** the user replied after it. Writes to `/tmp` are allowed;
+  `python3 -` scripts are not detected.
 - Any uncommitted file counts, including your own unrelated work in progress.
 - `extensions/packages.json` / `scripts/install-packages.js` — extensions that are **installed
   as-is** from npm/GitHub (not vendored here), bulk-installed via `pi install <source>`.
@@ -103,7 +110,7 @@ details.
 ## Status
 
 - [x] Workflows (`bead_shipper`, `bead_shipper_batch`)
-- [x] Skills (`planner`, `beader`, `shipper`, `dependabot`, `delete-comments`, `naming-analyzer`)
+- [x] Skills (`planner`, `beader`, `shipper`, `dependabot`, `delete-comments`, `naming-analyzer`, `grill-me`, `grilling`, `improve-codebase-architecture`)
 - [x] Extensions installed from npm/GitHub (`extensions/packages.json` + `install-packages.js`)
 - [x] Extensions ported into this repo (`require-skills.ts`, `no-comments.ts`)
 - [x] Theme (`nightowl`)
