@@ -9,7 +9,8 @@ import {
 	type ToolAction,
 } from "../policy/require-skills.ts";
 import { gitWorkspace } from "../policy/workspace.ts";
-import { blockFailure, unifiedEditSections } from "./lib/pi-edit.ts";
+import { unifiedEditSections } from "./lib/pi-edit.ts";
+import { failureReason, blockUnlessConfirmed } from "./lib/pi-gate.ts";
 
 const EDIT_TOOLS = new Set(["edit", "write"]);
 const DELEGATION_TOOLS = new Set(["Agent", "workflow"]);
@@ -85,12 +86,13 @@ export default function (pi: ExtensionAPI) {
 	});
 
 	pi.on("tool_call", async (event, ctx) => {
+		let reason: string | undefined;
 		try {
-			const reason = blockReasonForToolUse(toolAction(event.toolName, event.input, ctx.cwd), sessionInputs(ctx));
-			if (reason) return { block: true, reason };
+			reason = blockReasonForToolUse(toolAction(event.toolName, event.input, ctx.cwd), sessionInputs(ctx));
 		} catch (error) {
-			return blockFailure("require-skills", error);
+			reason = failureReason("require-skills", error);
 		}
+		if (reason) return blockUnlessConfirmed(ctx, "require-skills", reason);
 	});
 
 	pi.on("agent_before_settle", async (event, ctx) => {
@@ -99,7 +101,7 @@ export default function (pi: ExtensionAPI) {
 		try {
 			reason = blockReasonForStop(sessionInputs(ctx));
 		} catch (error) {
-			reason = blockFailure("require-skills", error).reason;
+			reason = failureReason("require-skills", error);
 		}
 		if (!reason) return;
 		nudged = true;

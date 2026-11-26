@@ -9,7 +9,7 @@ import {
 	type ToolAction,
 } from "../policy/require-skills.ts";
 import { gitWorkspace } from "../policy/workspace.ts";
-import { blockStop, denyToolUse, runHook } from "./lib/claude-io.ts";
+import { askUserOrDeny, blockStop, runHook } from "./lib/claude-io.ts";
 
 const EDIT_TOOLS = new Set(["Edit", "Write", "MultiEdit", "NotebookEdit"]);
 const DELEGATION_TOOLS = new Set(["Agent", "Workflow"]);
@@ -107,7 +107,7 @@ runHook("require-skills", (hookInput) => {
 	};
 	if (hookInput.hook_event_name === "PreToolUse") {
 		const reason = blockReasonForToolUse(toolAction(hookInput.tool_name, hookInput.tool_input, cwd), session);
-		if (reason) denyToolUse(reason);
+		if (reason) askUserOrDeny(hookInput, reason);
 	} else if (hookInput.hook_event_name === "Stop" && !hookInput.stop_hook_active) {
 		const reason = blockReasonForStop(session);
 		if (reason) blockStop(reason);

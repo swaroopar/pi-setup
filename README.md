@@ -16,22 +16,23 @@ Modeled on [mitsuhiko/agent-stuff](https://github.com/mitsuhiko/agent-stuff) (pu
   non-package skill directories `~/.claude/skills/` (Claude Code) and `~/.agents/skills/` (the
   cross-harness convention `pi` also live-loads) — see `scripts/README.md`.
 - `policy/` — the agent guard rules, written once in TypeScript and shared by both harnesses:
-  - `require-skills.ts` — blocks `git commit`, pushes back on finishing a turn until the required
-    skills (listed in `AGENTS.md`) ran on the current branch, and blocks changes before `grill-me`
-    (see below);
-  - `no-comments.ts` — blocks edits that add new code comments (existing ones stay; tool
+  - `require-skills.ts` — stops `git commit`, pushes back on finishing a turn until the required
+    skills (listed in `AGENTS.md`) ran on the current branch, and stops changes before `grill-me`
+    (see below). A stopped call asks the user, who can allow it once;
+  - `no-comments.ts` — refuses (no prompt) edits that add new code comments (existing ones stay; tool
     directives like `eslint-disable` are allowed);
   - `workspace.ts` — the git facts the rules need (branch window start, newest change, repo root);
   - `files.ts` — reading the current file content for comparisons.
 - `extensions/` — custom extension **source ported into this repo**, also declared via the `"pi"`
   field (`./extensions/*.ts`). Currently: `require-skills.ts`, `no-comments.ts` — thin pi adapters over
-  `policy/`; `extensions/lib/` holds their shared edit-input parsing and is not loaded as an extension.
+  `policy/`; `extensions/lib/` holds their shared edit-input parsing and the confirm gate, and is not loaded as
+  an extension.
 - `hooks/` — thin Claude Code adapters over `policy/` (`require-skills.ts`, `no-comments.ts`), run as
   `node hooks/<name>.ts` (Node >= 23.6 runs TypeScript directly; `hooks/lib/` holds the shared
   Claude hook I/O). Registered **globally** in `~/.claude/settings.json` by
   `scripts/install-claude-hooks.mjs` (part of `npm run setup`), pointing at this checkout and pinned
-  to the Node binary that ran the installer. A hook that crashes blocks instead of letting the
-  action through.
+  to the Node binary that ran the installer. A hook that crashes on a tool call asks the user
+  with the error; a crash elsewhere (or a hook that fails to load) blocks.
 - `tests/` — `npm test` (`node --test`): rule tests as case tables, plus adapter tests against
   temporary git repos.
 - `extensions/packages.json` / `scripts/install-packages.js` — extensions that are **installed
@@ -60,6 +61,9 @@ Modeled on [mitsuhiko/agent-stuff](https://github.com/mitsuhiko/agent-stuff) (pu
 - Pass when every required skill ran inside the window **and** `code-review` ran after the
   last edit.
 - Blocks `git commit` (also `rtk git commit`) and pushes back once per prompt when finishing.
+- A blocked tool call asks you first (Claude Code permission prompt, pi confirm dialog). One allow
+  lets that one call through. Where nobody would see a prompt (pi without a UI, Claude Code in
+  `bypassPermissions` mode) it denies. A no-comments rule hit never asks; a crash of either guard does.
 - Finishing is **not** pushed back when a required skill or `grilling` ran in that turn: it may
   be waiting on the user's answers.
 - Before any change: edit tools on files inside the repo, and shell commands that write inside the

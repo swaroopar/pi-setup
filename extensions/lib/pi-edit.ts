@@ -16,7 +16,3 @@ export function unifiedEditSections(script: string): EditSection[] {
 	}
 	return [...sections.values()];
 }
-
-export function blockFailure(name: string, error: unknown) {
-	return { block: true, reason: `${name} extension failed, so it blocked to stay safe: ${error instanceof Error ? error.message : error}` };
-}

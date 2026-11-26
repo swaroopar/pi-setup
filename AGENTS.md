@@ -26,6 +26,8 @@ Rules:
 - Hooks enforce this (rules in `policy/require-skills.ts`; adapters `hooks/require-skills.ts` for Claude Code, `extensions/require-skills.ts` for pi):
   - file edits and shell commands that write inside the repo are blocked until `grill-me` ran and the user answered;
   - `git commit` is blocked until all five ran;
+  - a blocked call asks the user; one allow lets that one call through. Where no prompt is possible
+    (pi print mode, Claude Code `bypassPermissions`) it is denied. A hook crash on a tool call asks too;
   - finishing a turn is pushed back once, unless a required skill or `grilling` ran in that turn
     (it may be waiting on you).
 
@@ -34,7 +36,7 @@ Rules:
 - Don't write code comments. Make the code say it: clear names, types, small functions.
 - A non-obvious decision goes in an ADR: `docs/adr/NNNN-short-title.md`.
 - Allowed: tool directives only (`eslint-disable`, `@ts-expect-error`, `noqa`, `type: ignore`, shebangs).
-- Hooks block edits that add comments
+- Hooks block edits that add comments, without asking
   (rules in `policy/no-comments.ts`; adapters `hooks/no-comments.ts` for Claude Code, `extensions/no-comments.ts` for pi).
 - To clean up existing comments, the user runs `/delete-comments [path]`
   (pi: `/skill:delete-comments [path]`).

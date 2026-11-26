@@ -44,7 +44,16 @@ tree look "changed" forever, and refused skill calls were counted as runs.
 - **Lazy inputs**: the rules receive session events as a function and git facts through a small
   `Workspace` interface (`policy/workspace.ts`), not precomputed values. Most hook calls (reads,
   read-only shell) never need them, so they never parse the session log or run git.
-- **Fail safe**: if a hook or extension throws, it blocks with an explanation instead of allowing.
+- **Ask, don't lock**: a blocked tool call (grill gate, commit gate) asks the user instead of refusing:
+  Claude Code answers `permissionDecision: "ask"`, pi shows `ctx.ui.confirm`. One allow covers one
+  call. The reason also goes to the agent (`additionalContext`), so it still knows what to do when
+  the user declines. Where nobody would see a prompt, it denies: pi without a UI (print mode), and
+  Claude Code in `bypassPermissions` mode (which skips prompts; auto mode still shows them). A
+  no-comments rule hit stays a hard deny, because the agent can always drop the comment (a crash
+  is handled below).
+- **Fail safe**: if a hook or extension (require-skills or no-comments) throws on a tool call, it
+  asks the user with the error (denies where no prompt is possible). A Claude Stop crash blocks;
+  a pi settle crash pushes back once with the error.
   Claude hooks are registered as `node … || exit 2`, so even a hook that fails to load (exit 1,
   which Claude Code treats as non-blocking) blocks.
 - **Unknown always means "this repo"**: an unknown commit target falls back to the current

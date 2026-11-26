@@ -9,12 +9,22 @@ export type HookInput = {
 	tool_name?: string;
 	tool_input?: any;
 	stop_hook_active?: boolean;
+	permission_mode?: string;
 };
 
-export function denyToolUse(reason: string): void {
+type ToolUseDecision = "deny" | "ask";
+
+function decideToolUse(decision: ToolUseDecision, reason: string): void {
+	const additionalContext = decision === "ask" ? reason : undefined;
 	console.log(JSON.stringify({
-		hookSpecificOutput: { hookEventName: "PreToolUse", permissionDecision: "deny", permissionDecisionReason: reason },
+		hookSpecificOutput: { hookEventName: "PreToolUse", permissionDecision: decision, permissionDecisionReason: reason, additionalContext },
 	}));
+}
+
+export const denyToolUse = (reason: string) => decideToolUse("deny", reason);
+
+export function askUserOrDeny(input: HookInput | undefined, reason: string): void {
+	decideToolUse(input?.permission_mode === "bypassPermissions" ? "deny" : "ask", reason);
 }
 
 export function blockStop(reason: string): void {
@@ -22,10 +32,15 @@ export function blockStop(reason: string): void {
 }
 
 export function runHook(name: string, handle: (input: HookInput) => void): void {
+	let input: HookInput | undefined;
 	try {
-		handle(JSON.parse(readFileSync(0, "utf8")));
+		const parsed: HookInput = JSON.parse(readFileSync(0, "utf8"));
+		input = parsed;
+		handle(parsed);
 	} catch (error) {
-		console.error(`${name} hook failed, so it blocked to stay safe: ${error instanceof Error ? error.message : error}`);
+		const reason = `${name} hook failed, so it can't check this call: ${error instanceof Error ? error.message : error}`;
+		if (input?.hook_event_name === "PreToolUse") return askUserOrDeny(input, reason);
+		console.error(reason);
 		process.exit(BLOCKING_EXIT_CODE);
 	}
 }

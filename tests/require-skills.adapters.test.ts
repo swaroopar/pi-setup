@@ -12,6 +12,8 @@ import {
 	writeTranscript,
 } from "./helpers.ts";
 
+const ASKS_USER = /"permissionDecision":"ask"/;
+
 describe("Claude Code adapter", () => {
 	const prompt = (at: number, text = "go") => ({ timestamp: isoAt(at), type: "user", message: { content: text } });
 	const meta = (at: number) => ({ timestamp: isoAt(at), type: "user", isMeta: true, message: { content: "Stop hook feedback" } });
@@ -39,19 +41,19 @@ describe("Claude Code adapter", () => {
 		assert.equal(editHook(makeRepo(), [skill(ON_BRANCH, "grill-me"), prompt(ON_BRANCH + 1)]), "");
 	});
 	test("grilling before the branch point does not count", () => {
-		assert.match(editHook(makeRepo(), [skill(BEFORE_BRANCH, "grill-me"), prompt(BEFORE_BRANCH + 1), prompt(AFTER_COMMIT)]), /deny/);
+		assert.match(editHook(makeRepo(), [skill(BEFORE_BRANCH, "grill-me"), prompt(BEFORE_BRANCH + 1), prompt(AFTER_COMMIT)]), ASKS_USER);
 	});
 	test("without a remote the window starts at HEAD", () => {
-		assert.match(editHook(makeRepo({ withOrigin: false }), [skill(ON_BRANCH, "grill-me"), prompt(ON_BRANCH + 1)]), /deny/);
+		assert.match(editHook(makeRepo({ withOrigin: false }), [skill(ON_BRANCH, "grill-me"), prompt(ON_BRANCH + 1)]), ASKS_USER);
 	});
 	test("a typed /grill-me plus an answer unlocks edits", () => {
 		assert.equal(editHook(makeRepo(), [slash(AFTER_COMMIT, "grill-me"), prompt(AFTER_COMMIT + 1)]), "");
 	});
 	test("a failed grill-me call does not unlock edits", () => {
-		assert.match(editHook(makeRepo(), [skill(AFTER_COMMIT, "grill-me", "g"), toolError(AFTER_COMMIT + 1, "g"), prompt(AFTER_COMMIT + 2)]), /deny/);
+		assert.match(editHook(makeRepo(), [skill(AFTER_COMMIT, "grill-me", "g"), toolError(AFTER_COMMIT + 1, "g"), prompt(AFTER_COMMIT + 2)]), ASKS_USER);
 	});
 	test("stop feedback is not an answer", () => {
-		assert.match(editHook(makeRepo(), [skill(AFTER_COMMIT, "grill-me"), meta(AFTER_COMMIT + 1)]), /deny/);
+		assert.match(editHook(makeRepo(), [skill(AFTER_COMMIT, "grill-me"), meta(AFTER_COMMIT + 1)]), ASKS_USER);
 	});
 	test("old untracked files do not count as changes", () => {
 		const repo = makeRepo({ untracked: [[".DS_Store", BEFORE_BRANCH], ["request.json", BEFORE_BRANCH]] });
@@ -83,7 +85,7 @@ describe("Claude Code adapter", () => {
 		const result = runClaudeHook("require-skills.ts", {
 			hook_event_name: "PreToolUse", cwd: makeRepo(), tool_name: "Edit", tool_input: {}, transcript_path: writeTranscript([prompt(AFTER_COMMIT)]),
 		});
-		assert.match(result, /deny/);
+		assert.match(result, ASKS_USER);
 	});
 	test("a workflow named after code-review counts as the review", () => {
 		const workflow = toolUse(AFTER_COMMIT + 60, "Workflow", { script: "export const meta = { name: 'code-review-session-diff' }\n" }, "w");
@@ -92,6 +94,20 @@ describe("Claude Code adapter", () => {
 	test("a failed sub-agent run does not count as the review", () => {
 		const agent = toolUse(AFTER_COMMIT + 60, "Agent", { description: "Code review: standards" }, "a");
 		assert.match(commitHook(makeRepo({ modifiedAt: AFTER_COMMIT + 50 }), [...allSkills(ON_BRANCH), agent, toolError(AFTER_COMMIT + 61, "a")]), /code-review/);
+	});
+	test("a hook crash on a tool call asks the user instead of blocking", () => {
+		const result = runClaudeHook("require-skills.ts", { hook_event_name: "PreToolUse", cwd: 42, tool_name: "Bash", tool_input: { command: "rm f" }, transcript_path: "/nonexistent" });
+		assert.match(result, ASKS_USER);
+		assert.match(result, /failed, so it can't check this call/);
+	});
+	test("bypass mode denies, because nobody would see the prompt", () => {
+		const result = runClaudeHook("require-skills.ts", {
+			hook_event_name: "PreToolUse", permission_mode: "bypassPermissions", cwd: makeRepo(), tool_name: "Edit", tool_input: { file_path: "f.py" }, transcript_path: writeTranscript([prompt(AFTER_COMMIT)]),
+		});
+		assert.match(result, /"permissionDecision":"deny"/);
+	});
+	test("an ask also tells the agent why, in case the user declines", () => {
+		assert.match(editHook(makeRepo(), [prompt(AFTER_COMMIT)]), /"additionalContext":"No changes before grilling/);
 	});
 	test("stop_hook_active never blocks twice", () => {
 		assert.equal(stopHook(makeRepo({ modifiedAt: AFTER_COMMIT + 50 }), [prompt(AFTER_COMMIT)], true), "");
@@ -127,7 +143,7 @@ describe("pi adapter", async () => {
 	test("an internal error blocks instead of allowing", async () => {
 		const broken = { cwd: makeRepo(), sessionManager: { getBranch: () => { throw new Error("boom"); } } };
 		const result = await handlers.tool_call({ toolName: "edit", input: { path: "f.py", edits: [] } }, broken);
-		assert.match(result?.reason ?? "", /failed, so it blocked/);
+		assert.match(result?.reason ?? "", /failed, so it can't check this call/);
 	});
 	test("a failed SKILL.md read does not unlock edits", async () => {
 		const entries = [readSkill(AFTER_COMMIT, "grill-me", "g"), toolError(AFTER_COMMIT + 1, "g"), prompt(AFTER_COMMIT + 2)];
@@ -156,6 +172,14 @@ describe("pi adapter", async () => {
 		const repo = makeRepo({ modifiedAt: AFTER_COMMIT + 50 });
 		assert.ok(await toolCall(repo, [...before, edit], "bash", { command: "git commit -m y" }));
 		assert.equal(await toolCall(repo, [...before, edit, workflow], "bash", { command: "git commit -m y" }), undefined);
+	});
+	test("with a UI, a blocked call asks the user and an allow lets it through", async () => {
+		const asked: string[] = [];
+		const withUI = (allow: boolean) => ({ ...ctx(makeRepo(), [prompt(AFTER_COMMIT)]), hasUI: true, ui: { confirm: async (title: string) => (asked.push(title), allow) } });
+		assert.equal(await handlers.tool_call({ toolName: "edit", input: { path: "f.py", edits: [] } }, withUI(true)), undefined);
+		const declined = await handlers.tool_call({ toolName: "edit", input: { path: "f.py", edits: [] } }, withUI(false));
+		assert.match(declined?.reason ?? "", /The user declined\. No changes before grilling/);
+		assert.equal(asked.length, 2);
 	});
 	test("settle nudges only once per prompt", async () => {
 		const repo = makeRepo({ modifiedAt: AFTER_COMMIT + 50 });
