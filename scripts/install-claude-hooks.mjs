@@ -24,7 +24,7 @@ function nodeIsNewEnough() {
 }
 
 function hookGroup(matcher, script) {
-	const group = { hooks: [{ type: "command", command: `"${process.execPath}" --no-warnings "${join(HOOKS_DIR, script)}"` }] };
+	const group = { hooks: [{ type: "command", command: `"${process.execPath}" --no-warnings "${join(HOOKS_DIR, script)}" || exit 2` }] };
 	return matcher ? { matcher, ...group } : group;
 }
 

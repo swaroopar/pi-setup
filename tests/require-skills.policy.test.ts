@@ -4,35 +4,26 @@ import {
 	blockReasonForStop,
 	blockReasonForToolUse,
 	GRILL_FIRST_MESSAGE,
-	isCommitCommand,
 	type SessionEvent,
 	type ToolAction,
-	writesFiles,
 } from "../policy/require-skills.ts";
 import type { Workspace } from "../policy/workspace.ts";
 
 const WINDOW_START = 1000;
+const REPO = "/repo";
 const prompt = (at: number): SessionEvent => ({ at, kind: "prompt" });
-const edit = (at: number): SessionEvent => ({ at, kind: "edit" });
+const edit = (at: number, path = `${REPO}/f.py`): SessionEvent => ({ at, kind: "edit", paths: [path] });
 const skill = (at: number, name: string): SessionEvent => ({ at, kind: "skill", name });
 const beforeCoding = (at: number) => [
 	skill(at, "codebase-design"), skill(at + 1, "grill-me"), prompt(at + 2),
 	skill(at + 3, "improve-codebase-architecture"), skill(at + 4, "naming-analyzer"),
 ];
+const shell = (command: string): ToolAction => ({ kind: "shell", command, cwd: REPO });
 
-const COMMIT: ToolAction = { kind: "shell", command: "rtk git commit -m x" };
-const EDIT_FILE: ToolAction = { kind: "file-edit", paths: ["f.py"] };
-const WRITE_SHELL: ToolAction = { kind: "shell", command: "echo x > f.py" };
-const READ_SHELL: ToolAction = { kind: "shell", command: "grep x f.py | head" };
+const COMMIT = shell("rtk git commit -m x");
+const EDIT_FILE: ToolAction = { kind: "file-edit", paths: [`${REPO}/f.py`] };
 
-type Case = {
-	name: string;
-	action?: ToolAction;
-	events: SessionEvent[];
-	newestChange?: number;
-	insideWorkspace?: boolean;
-	expected: undefined | RegExp | string;
-};
+type Case = { name: string; action?: ToolAction; events: SessionEvent[]; newestChange?: number; expected: undefined | RegExp | string };
 
 const cases: Case[] = [
 	{ name: "commit: changes and no skills", action: COMMIT, events: [prompt(1100)], newestChange: 1150, expected: /codebase-design/ },
@@ -41,14 +32,24 @@ const cases: Case[] = [
 	{ name: "commit: change after review", action: COMMIT, events: [...beforeCoding(1100), skill(1150, "code-review"), edit(1200)], expected: /code-review \(again/ },
 	{ name: "commit: skills before the window", action: COMMIT, events: [...beforeCoding(500), skill(600, "code-review"), edit(1200)], expected: /codebase-design/ },
 	{ name: "commit: message names both skill commands", action: COMMIT, events: [edit(1200)], expected: /\/<skill> \(pi: \/skill:<skill>\)/ },
+	{ name: "commit: edits outside the repo don't count", action: COMMIT, events: [prompt(1100), edit(1200, "/Users/me/.pi/agent/settings.json")], expected: undefined },
+	{ name: "commit: edit without a known path counts", action: COMMIT, events: [{ at: 1200, kind: "edit", paths: "unknown" }], expected: /codebase-design/ },
+	{ name: "commit + write in one command: commit gate decides first", action: shell("git commit -m x && rm src/a.py"), events: [edit(1200)], expected: /codebase-design/ },
+	{ name: "commit + write in one command: write still needs grilling", action: shell("git commit -m x && rm src/a.py"), events: [prompt(1100)], expected: GRILL_FIRST_MESSAGE },
+	{ name: "commit: in another repo is not gated", action: shell("cd ../other && git commit -m x"), events: [edit(1200)], expected: undefined },
 	{ name: "grill: edit before grill-me", action: EDIT_FILE, events: [prompt(1100)], expected: GRILL_FIRST_MESSAGE },
 	{ name: "grill: started, no answer", action: EDIT_FILE, events: [prompt(1100), skill(1101, "grill-me")], expected: GRILL_FIRST_MESSAGE },
 	{ name: "grill: answered", action: EDIT_FILE, events: [skill(1100, "grill-me"), prompt(1101)], expected: undefined },
 	{ name: "grill: before the window", action: EDIT_FILE, events: [skill(500, "grill-me"), prompt(501), prompt(1100)], expected: GRILL_FIRST_MESSAGE },
-	{ name: "grill: outside the workspace", action: EDIT_FILE, events: [prompt(1100)], insideWorkspace: false, expected: undefined },
-	{ name: "grill: file-writing shell", action: WRITE_SHELL, events: [prompt(1100)], expected: GRILL_FIRST_MESSAGE },
-	{ name: "grill: read-only shell", action: READ_SHELL, events: [prompt(1100)], expected: undefined },
+	{ name: "grill: edit outside the repo", action: { kind: "file-edit", paths: ["/tmp/x.py"] }, events: [prompt(1100)], expected: undefined },
+	{ name: "grill: edit with an unknown path", action: { kind: "file-edit", paths: "unknown" }, events: [prompt(1100)], expected: GRILL_FIRST_MESSAGE },
+	{ name: "grill: subshell cd does not hide a repo write", action: shell("(cd /tmp && rm x) && rm src/a.py"), events: [prompt(1100)], expected: GRILL_FIRST_MESSAGE },
+	{ name: "grill: shell write inside the repo", action: shell("echo x > f.py"), events: [prompt(1100)], expected: GRILL_FIRST_MESSAGE },
+	{ name: "grill: shell write outside the repo", action: shell("mkdir -p /tmp/x && mv ~/a ~/b"), events: [prompt(1100)], expected: undefined },
+	{ name: "grill: shell write with unknown targets", action: shell("rm $FILE"), events: [prompt(1100)], expected: GRILL_FIRST_MESSAGE },
+	{ name: "grill: read-only shell", action: shell("grep x f.py | head"), events: [prompt(1100)], expected: undefined },
 	{ name: "stop: changes, no skill this turn", events: [prompt(1100)], newestChange: 1150, expected: /codebase-design/ },
+	{ name: "stop: only edits outside the repo", events: [prompt(1100), edit(1200, "/tmp/scratch.md")], expected: undefined },
 	{ name: "stop: required skill waiting on the user", events: [prompt(1100), skill(1101, "grill-me")], newestChange: 1150, expected: undefined },
 	{ name: "stop: grilling waiting on the user", events: [prompt(1100), skill(1101, "grilling")], newestChange: 1150, expected: undefined },
 	{ name: "stop: other skills don't pause it", events: [prompt(1100), skill(1101, "simplify")], newestChange: 1150, expected: /codebase-design/ },
@@ -56,45 +57,17 @@ const cases: Case[] = [
 ];
 
 describe("require-skills rules", () => {
-	for (const { name, action, events, newestChange = 0, insideWorkspace = true, expected } of cases) {
+	for (const { name, action, events, newestChange = 0, expected } of cases) {
 		test(name, () => {
-			const workspace: Workspace = { windowStart: () => WINDOW_START, newestChangeTime: () => newestChange, contains: () => insideWorkspace };
+			const workspace: Workspace = {
+				windowStart: () => WINDOW_START,
+				newestChangeTime: () => newestChange,
+				contains: (path) => path === REPO || path.startsWith(`${REPO}/`),
+			};
 			const inputs = { events: () => events, workspace };
 			const reason = action ? blockReasonForToolUse(action, inputs) : blockReasonForStop(inputs);
 			if (expected instanceof RegExp) assert.match(reason ?? "", expected);
 			else assert.equal(reason, expected);
 		});
 	}
-});
-
-describe("isCommitCommand", () => {
-	const commands: [string, boolean][] = [
-		["git commit -m x", true], ["rtk git commit -m x", true], ["cd a && rtk git commit", true],
-		["rtk proxy git commit", true], ["git -c a=b commit", true], ['echo "git commit"', false],
-		["rtk git log --grep commit", false], ["grep commit x", false],
-	];
-	for (const [command, expected] of commands) test(command, () => assert.equal(isCommitCommand(command), expected));
-});
-
-describe("writesFiles", () => {
-	const commands: [string, boolean][] = [
-		["sed -i '' 's/a/b/' f.py", true], ["rtk sed -i 's/a/b/' f.py", true], ["echo hi > out.txt", true],
-		["echo hi >> out.txt", true], ["cat f | tee out.txt", true], ["cd x && rm f.py", true],
-		["git checkout -b x", true], ["mkdir -p src", true], ["perl -pi -e 's/a/b/' f", true],
-		["ls > /tmp/x", false], ["ls > /private/tmp/x", false], ["grep a f.py | head", false],
-		["cmd 2>/dev/null", false], ["cmd 2>&1 | tail", false], ["git status", false], ["git log --oneline", false],
-		['python3 -c "print(1 > 0)"', false], ["sed -n 1p f.py | grep -i x", false], ["echo 'a > b'", false],
-		["cat <<'EOF' > /tmp/x.py\nif a > b:\n    rm = 1\nEOF", false], ["npm run test", false],
-		["python3 - <<'EOF'\nopen('f.py','w').write('x')\nEOF", true],
-		["python3 -c \"from pathlib import Path; Path('f').write_text('x')\"", true],
-		["rtk python3 - <<'EOF'\nimport os; os.remove('f.py')\nEOF", true],
-		["uv run python -c \"import shutil; shutil.rmtree('x')\"", true],
-		["/usr/bin/python3 -c \"open('f','w')\"", true], [".venv/bin/python -c \"open('f','w')\"", true],
-		["python3.12 -c \"import os; os.makedirs('d')\"", true],
-		["python3 -c \"open(os.path.join(d,'f'), 'w').write('a')\"", true],
-		["python3 -c \"open(Path('f'), mode='a')\"", true], ["python3 -c \"open('x', 'r+')\"", true],
-		["python3 -c \"print(open('x').read())\"", false], ["python3 -c \"open('x','rb').read()\"", false],
-		["python3 -c \"import json; json.load(open('a.json'))\"", false],
-	];
-	for (const [command, expected] of commands) test(command.split("\n")[0], () => assert.equal(writesFiles(command), expected));
 });

@@ -28,14 +28,28 @@ tree look "changed" forever, and refused skill calls were counted as runs.
 - **Grill gate**: unlocked only by a successful `grill-me` run followed by a real user reply.
 - **Stop / settle**: not pushed back in a turn where a required skill or `grilling` ran, because
   the agent may be waiting on the user.
-- **Shell writes**: detected by command shape (`sed -i`, redirects, `tee`, `mv`, `cp`, `rm`, git
-  write commands, inline Python with write calls). Redirects to `/tmp` are allowed; inline Python
-  writes are blocked wherever they point; `python3 script.py` is not inspected.
+- **Paths decide, not command shapes**: `policy/shell.ts` turns a shell command into the
+  directories it commits and the paths it writes (following `cd`, `git -C`, `~`, `$HOME`). Only
+  writes inside the repo hit the grill gate, and only commits targeting the repo hit the commit
+  gate. Edit-tool calls on files outside the repo don't count as changes. Anything whose targets
+  can't be known (other variables, `patch`, inline Python with write calls) counts as the repo.
+  `python3 script.py` is not inspected.
 
 - **Lazy inputs**: the rules receive session events as a function and git facts through a small
   `Workspace` interface (`policy/workspace.ts`), not precomputed values. Most hook calls (reads,
   read-only shell) never need them, so they never parse the session log or run git.
 - **Fail safe**: if a hook or extension throws, it blocks with an explanation instead of allowing.
+  Claude hooks are registered as `node … || exit 2`, so even a hook that fails to load (exit 1,
+  which Claude Code treats as non-blocking) blocks.
+- **Unknown always means "this repo"**: an unknown commit target falls back to the current
+  directory and an unknown write target makes the command count as writing the repo. Both are
+  gated; they differ only in shape because a commit needs a directory to compare.
+- **Shell scope**: `cd` inside `( … )` or a pipeline doesn't carry over; `cd X || …` and `cd -`
+  make the directory unknown. `env`, `sudo`, `rtk`, `uv run` prefixes are stripped, and
+  `bash -c '…'` scripts are analysed too.
+- **Known gaps** (heuristic, not a sandbox): `python3 script.py`, `node -e`, `make`, `npm run …`
+  and other programs that write files internally are not inspected; the `git status`-based
+  commit gate is the backstop.
 
 ## Consequences
 

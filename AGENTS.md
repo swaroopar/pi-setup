@@ -21,7 +21,7 @@ Rules:
 - If you can't invoke a skill yourself, ask the user to run it
   (Claude Code: `/<skill>`, pi: `/skill:<skill>`).
 - Hooks enforce this (rules in `policy/require-skills.ts`; adapters `hooks/require-skills.ts` for Claude Code, `extensions/require-skills.ts` for pi):
-  - file edits and file-writing shell commands are blocked until `grill-me` ran and the user answered;
+  - file edits and shell commands that write inside the repo are blocked until `grill-me` ran and the user answered;
   - `git commit` is blocked until all five ran;
   - finishing a turn is pushed back once, unless a required skill or `grilling` ran in that turn
     (it may be waiting on you).

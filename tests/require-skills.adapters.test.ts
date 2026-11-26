@@ -75,6 +75,16 @@ describe("Claude Code adapter", () => {
 		const broken = { timestamp: isoAt(AFTER_COMMIT + 1), type: "assistant", message: { content: [null, 42, { type: "text", text: "x" }] } };
 		assert.match(stopHook(makeRepo({ modifiedAt: AFTER_COMMIT + 50 }), [prompt(AFTER_COMMIT), broken, "not an object"]), /block/);
 	});
+	test("edits outside the repo do not trigger the stop check", () => {
+		const outside = toolUse(AFTER_COMMIT + 1, "Write", { file_path: "/tmp/scratch/notes.md" });
+		assert.equal(stopHook(makeRepo(), [prompt(AFTER_COMMIT), outside]), "");
+	});
+	test("an edit tool call without a path is gated before grilling", () => {
+		const result = runClaudeHook("require-skills.ts", {
+			hook_event_name: "PreToolUse", cwd: makeRepo(), tool_name: "Edit", tool_input: {}, transcript_path: writeTranscript([prompt(AFTER_COMMIT)]),
+		});
+		assert.match(result, /deny/);
+	});
 	test("stop_hook_active never blocks twice", () => {
 		assert.equal(stopHook(makeRepo({ modifiedAt: AFTER_COMMIT + 50 }), [prompt(AFTER_COMMIT)], true), "");
 	});
@@ -120,6 +130,15 @@ describe("pi adapter", async () => {
 		assert.ok(await toolCall(repo, [prompt(AFTER_COMMIT)], "bash", { command: "git commit -m y" }));
 		assert.ok(await settle(repo, [prompt(AFTER_COMMIT)]));
 		assert.equal(await settle(repo, [prompt(AFTER_COMMIT), readSkill(AFTER_COMMIT + 1, "grill-me")]), undefined);
+	});
+	test("edits outside the repo do not trigger the settle nudge", async () => {
+		const outside = call(AFTER_COMMIT + 1, "write", { path: "/tmp/scratch/notes.md", content: "" });
+		assert.equal(await settle(makeRepo(), [prompt(AFTER_COMMIT), outside]), undefined);
+		const unifiedOutside = call(AFTER_COMMIT + 1, "edit", { text: "[/tmp/scratch/a.ts]\n@APPEND\n+x" });
+		assert.equal(await settle(makeRepo(), [prompt(AFTER_COMMIT), unifiedOutside]), undefined);
+	});
+	test("shell writes outside the repo are allowed before grilling", async () => {
+		assert.equal(await toolCall(makeRepo(), [prompt(AFTER_COMMIT)], "bash", { command: "mkdir -p /tmp/pi-setup-x && mv ~/a ~/b" }), undefined);
 	});
 	test("settle nudges only once per prompt", async () => {
 		const repo = makeRepo({ modifiedAt: AFTER_COMMIT + 50 });

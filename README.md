@@ -51,7 +51,8 @@ Modeled on [mitsuhiko/agent-stuff](https://github.com/mitsuhiko/agent-stuff) (pu
   origin/HEAD`, then `origin/main`, `origin/master`; else HEAD's commit time). Commits and amends
   inside the task keep the history; a new branch or a push to the default branch resets it.
 - "Changed" = tracked files with uncommitted changes, untracked files modified after the window
-  start (old `.DS_Store`-style leftovers are ignored), or edit-tool calls in the session.
+  start (old `.DS_Store`-style leftovers are ignored), or edit-tool calls on files inside the repo
+  (edits elsewhere, like `~/.pi/agent/settings.json`, don't count).
 - Last edit time = newest mtime of those files / last edit-tool call.
 - Skill calls that errored or were refused don't count.
 - Pass when every required skill ran inside the window **and** `code-review` ran after the
@@ -59,11 +60,14 @@ Modeled on [mitsuhiko/agent-stuff](https://github.com/mitsuhiko/agent-stuff) (pu
 - Blocks `git commit` (also `rtk git commit`) and pushes back once per prompt when finishing.
 - Finishing is **not** pushed back when a required skill or `grilling` ran in that turn: it may
   be waiting on the user's answers.
-- Before any change: edit tools on files inside the repo, and shell commands that write files
-  (`sed -i`, `perl -i`, `>`/`>>`, `tee`, `mv`, `cp`, `rm`, `touch`, `mkdir`, `git apply/checkout/...`,
-  Python scripts with `open(..., 'w')`, `write_text`, `os.remove`, `shutil.` ...), are blocked
-  until `grill-me` ran **and** the user replied after it. Shell redirects to `/tmp` are allowed;
-  inline Python writes (`python3 -c`, heredocs) are blocked wherever they point. `python3 script.py` is not inspected.
+- Before any change: edit tools on files inside the repo, and shell commands that write inside the
+  repo, are blocked until `grill-me` ran **and** the user replied after it. `policy/shell.ts` works
+  out each command's targets (redirects, `tee`, `mv`, `cp`, `rm`, `touch`, `mkdir`, `ln`, `sed -i`,
+  `perl -i`, git write commands), following `cd <dir> &&`, `git -C <dir>`, `~` and `$HOME`. Writes
+  that only touch paths outside the repo are allowed. When targets can't be known (other
+  variables, `patch`, inline Python with write calls), the command counts as writing the repo.
+  `python3 script.py` is not inspected.
+- Commits are gated only when they target this repo; `cd ../other && git commit` is not.
 - Any uncommitted tracked file counts, including your own unrelated work in progress.
 - Why it works this way: `docs/adr/0001-require-skills-window.md`.
 

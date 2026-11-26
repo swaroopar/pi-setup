@@ -2,6 +2,7 @@ import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import {
 	blockReasonForStop,
 	blockReasonForToolUse,
+	type EditedPaths,
 	type SessionEvent,
 	type SessionInputs,
 	type ToolAction,
@@ -30,6 +31,13 @@ function failedToolIds(entries: any[]): Set<string> {
 	return failed;
 }
 
+function editedPaths(toolName: string, input: any): EditedPaths {
+	const paths = toolName === "edit" && typeof input?.text === "string"
+		? unifiedEditSections(input.text).map((section) => section.path)
+		: [input?.path].filter((path): path is string => typeof path === "string" && path !== "");
+	return paths.length ? paths : "unknown";
+}
+
 function sessionEvents(entries: any[]): SessionEvent[] {
 	const failed = failedToolIds(entries);
 	const events: SessionEvent[] = [];
@@ -44,7 +52,7 @@ function sessionEvents(entries: any[]): SessionEvent[] {
 		} else if (message.role === "assistant" && Array.isArray(message.content)) {
 			for (const block of message.content) {
 				if (block?.type !== "toolCall") continue;
-				if (EDIT_TOOLS.has(block.name)) events.push({ at, kind: "edit" });
+				if (EDIT_TOOLS.has(block.name)) events.push({ at, kind: "edit", paths: editedPaths(block.name, block.arguments) });
 				else if (block.name === "read" && !failed.has(block.id)) {
 					const skill = String(block.arguments?.path ?? "").match(SKILL_FILE_RE);
 					if (skill) events.push({ at, kind: "skill", name: skill[1] });
@@ -55,12 +63,10 @@ function sessionEvents(entries: any[]): SessionEvent[] {
 	return events;
 }
 
-function toolAction(toolName: string, input: any): ToolAction {
-	if (toolName === "bash") return { kind: "shell", command: String(input?.command ?? "") };
-	if (toolName === "write") return { kind: "file-edit", paths: [String(input?.path ?? "")] };
-	if (toolName !== "edit") return { kind: "other" };
-	if (typeof input?.text === "string") return { kind: "file-edit", paths: unifiedEditSections(input.text).map((s) => s.path) };
-	return { kind: "file-edit", paths: [String(input?.path ?? "")] };
+function toolAction(toolName: string, input: any, cwd: string): ToolAction {
+	if (toolName === "bash") return { kind: "shell", command: String(input?.command ?? ""), cwd };
+	if (EDIT_TOOLS.has(toolName)) return { kind: "file-edit", paths: editedPaths(toolName, input) };
+	return { kind: "other" };
 }
 
 function sessionInputs(ctx: HookContext): SessionInputs {
@@ -75,7 +81,7 @@ export default function (pi: ExtensionAPI) {
 
 	pi.on("tool_call", async (event, ctx) => {
 		try {
-			const reason = blockReasonForToolUse(toolAction(event.toolName, event.input), sessionInputs(ctx));
+			const reason = blockReasonForToolUse(toolAction(event.toolName, event.input, ctx.cwd), sessionInputs(ctx));
 			if (reason) return { block: true, reason };
 		} catch (error) {
 			return blockFailure("require-skills", error);

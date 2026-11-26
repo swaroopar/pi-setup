@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import {
 	blockReasonForStop,
 	blockReasonForToolUse,
+	type EditedPaths,
 	type SessionEvent,
 	type SessionInputs,
 	type ToolAction,
@@ -53,6 +54,11 @@ function failedToolIds(entries: TranscriptEntry[]): Set<string | undefined> {
 	return failed;
 }
 
+function editedPaths(input: any): EditedPaths {
+	const path = input?.file_path ?? input?.notebook_path ?? input?.path;
+	return typeof path === "string" && path ? [path] : "unknown";
+}
+
 function isPrompt(entry: TranscriptEntry, blocks: ContentBlock[]): boolean {
 	return entry.type === "user" && !entry.isMeta && !blocks.some((block) => block.type === "tool_result");
 }
@@ -72,7 +78,7 @@ function transcriptEvents(path: string): SessionEvent[] {
 				}
 			} else if (entry.type === "assistant" && block.type === "tool_use") {
 				const name = String(block.name ?? "");
-				if (EDIT_TOOLS.has(name) || EDIT_MCP_RE.test(name)) events.push({ at, kind: "edit" });
+				if (EDIT_TOOLS.has(name) || EDIT_MCP_RE.test(name)) events.push({ at, kind: "edit", paths: editedPaths(block.input) });
 				else if (name === "Skill" && !failed.has(block.id)) {
 					events.push({ at, kind: "skill", name: skillName(String(block.input?.skill ?? "")) });
 				}
@@ -82,21 +88,20 @@ function transcriptEvents(path: string): SessionEvent[] {
 	return events;
 }
 
-function toolAction(toolName: string | undefined, input: any): ToolAction {
-	if (toolName === "Bash") return { kind: "shell", command: String(input?.command ?? "") };
-	if (toolName && EDIT_TOOLS.has(toolName)) {
-		return { kind: "file-edit", paths: [String(input?.file_path ?? input?.notebook_path ?? "")] };
-	}
+function toolAction(toolName: string | undefined, input: any, cwd: string): ToolAction {
+	if (toolName === "Bash") return { kind: "shell", command: String(input?.command ?? ""), cwd };
+	if (toolName && EDIT_TOOLS.has(toolName)) return { kind: "file-edit", paths: editedPaths(input) };
 	return { kind: "other" };
 }
 
 runHook("require-skills", (hookInput) => {
+	const cwd = hookInput.cwd ?? process.cwd();
 	const session: SessionInputs = {
 		events: () => transcriptEvents(hookInput.transcript_path ?? ""),
-		workspace: gitWorkspace(hookInput.cwd ?? process.cwd()),
+		workspace: gitWorkspace(cwd),
 	};
 	if (hookInput.hook_event_name === "PreToolUse") {
-		const reason = blockReasonForToolUse(toolAction(hookInput.tool_name, hookInput.tool_input), session);
+		const reason = blockReasonForToolUse(toolAction(hookInput.tool_name, hookInput.tool_input, cwd), session);
 		if (reason) denyToolUse(reason);
 	} else if (hookInput.hook_event_name === "Stop" && !hookInput.stop_hook_active) {
 		const reason = blockReasonForStop(session);
