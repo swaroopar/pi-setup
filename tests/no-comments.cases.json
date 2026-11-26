@@ -1,0 +1,240 @@
+[
+ {
+  "name": "ts new line comment",
+  "path": "a.ts",
+  "before": "const a = 1;",
+  "after": "// set a\nconst a = 1;",
+  "blocked": true
+ },
+ {
+  "name": "ts inline comment",
+  "path": "a.ts",
+  "before": "const a = 1;",
+  "after": "const a = 1; // one",
+  "blocked": true
+ },
+ {
+  "name": "ts jsdoc",
+  "path": "a.ts",
+  "before": "",
+  "after": "/**\n * Adds.\n */\nfunction f() {}",
+  "blocked": true
+ },
+ {
+  "name": "ts url in string",
+  "path": "a.ts",
+  "before": "",
+  "after": "const u = \"http://x.com // y\";",
+  "blocked": false
+ },
+ {
+  "name": "ts eslint directive",
+  "path": "a.ts",
+  "before": "",
+  "after": "// eslint-disable-next-line no-console\nconsole.log(1);",
+  "blocked": false
+ },
+ {
+  "name": "ts ts-expect-error",
+  "path": "a.ts",
+  "before": "",
+  "after": "// @ts-expect-error bad lib\nfoo();",
+  "blocked": false
+ },
+ {
+  "name": "ts keep existing comment",
+  "path": "a.ts",
+  "before": "// old\nconst a = 1;",
+  "after": "// old\nconst a = 2;",
+  "blocked": false
+ },
+ {
+  "name": "ts code change on inline-comment line",
+  "path": "a.ts",
+  "before": "x = 1; // why",
+  "after": "x = 2; // why",
+  "blocked": false
+ },
+ {
+  "name": "py hash comment",
+  "path": "a.py",
+  "before": "x = 1",
+  "after": "# set x\nx = 1",
+  "blocked": true
+ },
+ {
+  "name": "py noqa",
+  "path": "a.py",
+  "before": "",
+  "after": "import os  # noqa: F401",
+  "blocked": false
+ },
+ {
+  "name": "py shebang",
+  "path": "a.py",
+  "before": "",
+  "after": "#!/usr/bin/env python3\nx = 1",
+  "blocked": false
+ },
+ {
+  "name": "py hash in string",
+  "path": "a.py",
+  "before": "",
+  "after": "s = \"a # b\"",
+  "blocked": false
+ },
+ {
+  "name": "sh comment",
+  "path": "run.sh",
+  "before": "",
+  "after": "# run\necho hi",
+  "blocked": true
+ },
+ {
+  "name": "markdown ignored",
+  "path": "README.md",
+  "before": "",
+  "after": "# Title",
+  "blocked": false
+ },
+ {
+  "name": "json ignored",
+  "path": "a.json",
+  "before": "",
+  "after": "{\"a\": 1}",
+  "blocked": false
+ },
+ {
+  "name": "sql comment",
+  "path": "q.sql",
+  "before": "",
+  "after": "-- get users\nSELECT 1;",
+  "blocked": true
+ },
+ {
+  "name": "Dockerfile comment",
+  "path": "Dockerfile",
+  "before": "",
+  "after": "# base\nFROM node",
+  "blocked": true
+ },
+ {
+  "name": "py docstring one-line",
+  "path": "a.py",
+  "before": "def f():\n    return 1",
+  "after": "def f():\n    \"\"\"Return one.\"\"\"\n    return 1",
+  "blocked": true
+ },
+ {
+  "name": "py docstring multi-line",
+  "path": "a.py",
+  "before": "def f():\n    return 1",
+  "after": "def f():\n    \"\"\"\n    Return one.\n    \"\"\"\n    return 1",
+  "blocked": true
+ },
+ {
+  "name": "py keep existing docstring",
+  "path": "a.py",
+  "before": "def f():\n    \"\"\"Doc.\"\"\"\n    return 1",
+  "after": "def f():\n    \"\"\"Doc.\"\"\"\n    return 2",
+  "blocked": false
+ },
+ {
+  "name": "py assigned triple string ok",
+  "path": "a.py",
+  "before": "",
+  "after": "SQL = \"\"\"\nSELECT 1\n\"\"\"",
+  "blocked": false
+ },
+ {
+  "name": "py pragma no cover",
+  "path": "a.py",
+  "before": "",
+  "after": "if x:  # pragma: no cover\n    pass",
+  "blocked": false
+ },
+ {
+  "name": "java javadoc",
+  "path": "A.java",
+  "before": "class A {}",
+  "after": "/**\n * A thing.\n * @author x\n */\nclass A {}",
+  "blocked": true
+ },
+ {
+  "name": "java block comment",
+  "path": "A.java",
+  "before": "",
+  "after": "/* hi */ int a = 1;",
+  "blocked": true
+ },
+ {
+  "name": "go comment",
+  "path": "a.go",
+  "before": "func f() {}",
+  "after": "// f does f\nfunc f() {}",
+  "blocked": true
+ },
+ {
+  "name": "go pointer deref",
+  "path": "a.go",
+  "before": "",
+  "after": "func f(p *int) {\n\t*p = 5\n}",
+  "blocked": false
+ },
+ {
+  "name": "go generate directive",
+  "path": "a.go",
+  "before": "",
+  "after": "//go:generate stringer -type=X\npackage a",
+  "blocked": false
+ },
+ {
+  "name": "go nolint",
+  "path": "a.go",
+  "before": "",
+  "after": "x := 1 //nolint:errcheck",
+  "blocked": false
+ },
+ {
+  "name": "rust doc ///",
+  "path": "a.rs",
+  "before": "fn f() {}",
+  "after": "/// Does f.\nfn f() {}",
+  "blocked": true
+ },
+ {
+  "name": "rust inner doc //!",
+  "path": "lib.rs",
+  "before": "",
+  "after": "//! Crate docs.\nfn f() {}",
+  "blocked": true
+ },
+ {
+  "name": "rust deref",
+  "path": "a.rs",
+  "before": "",
+  "after": "fn f(x: &mut i32) {\n    *x += 1;\n}",
+  "blocked": false
+ },
+ {
+  "name": "rust attribute",
+  "path": "a.rs",
+  "before": "",
+  "after": "#[derive(Debug)]\nstruct A;",
+  "blocked": false
+ },
+ {
+  "name": "js comment",
+  "path": "a.js",
+  "before": "",
+  "after": "// hi\nlet a = 1;",
+  "blocked": true
+ },
+ {
+  "name": "ts multiply continuation",
+  "path": "a.ts",
+  "before": "",
+  "after": "const a = b\n  *c;",
+  "blocked": false
+ }
+]

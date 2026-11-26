@@ -4,7 +4,8 @@
   "description": "Personal pi coding agent skills and extensions, for one-click setup on a vanilla pi install.",
   "private": true,
   "scripts": {
-    "setup": "pi install . && node scripts/install-packages.js && node scripts/generate-workflow-json.js && scripts/install-skills.sh && python3 scripts/install-claude-hooks.py"
+    "setup": "pi install . && node scripts/install-packages.js && node scripts/generate-workflow-json.js && scripts/install-skills.sh && node scripts/install-claude-hooks.mjs",
+    "test": "node --test tests/*.test.ts"
   },
   "keywords": [
     "pi-package",
@@ -16,10 +17,13 @@
       "./skills"
     ],
     "extensions": [
-      "./extensions"
+      "./extensions/*.ts"
     ],
     "themes": [
       "./themes"
     ]
+  },
+  "engines": {
+    "node": ">=23.6"
   }
 }

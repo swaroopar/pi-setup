@@ -6,8 +6,8 @@ Accepted (2026-11-26)
 
 ## Context
 
-The `require-skills` hooks (`hooks/require-skills.py` for Claude Code, `extensions/require-skills.ts`
-for pi) force every change through `codebase-design` → `grill-me` → `improve-codebase-architecture`
+The `require-skills` rules (`policy/require-skills.ts`, used by `hooks/require-skills.ts` for Claude Code
+and `extensions/require-skills.ts` for pi) force every change through `codebase-design` → `grill-me` → `improve-codebase-architecture`
 → `naming-analyzer` → `code-review`, and block file changes until `grill-me` has been answered.
 
 Earlier versions measured everything from HEAD's commit time. A commit or amend in the middle of a
@@ -31,6 +31,11 @@ tree look "changed" forever, and refused skill calls were counted as runs.
 - **Shell writes**: detected by command shape (`sed -i`, redirects, `tee`, `mv`, `cp`, `rm`, git
   write commands, inline Python with write calls). Redirects to `/tmp` are allowed; inline Python
   writes are blocked wherever they point; `python3 script.py` is not inspected.
+
+- **Lazy inputs**: the rules receive session events as a function and git facts through a small
+  `Workspace` interface (`policy/workspace.ts`), not precomputed values. Most hook calls (reads,
+  read-only shell) never need them, so they never parse the session log or run git.
+- **Fail safe**: if a hook or extension throws, it blocks with an explanation instead of allowing.
 
 ## Consequences
 

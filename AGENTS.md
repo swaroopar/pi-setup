@@ -20,7 +20,7 @@ Rules:
   until the current one is finished.
 - If you can't invoke a skill yourself, ask the user to run it
   (Claude Code: `/<skill>`, pi: `/skill:<skill>`).
-- Hooks enforce this (`hooks/require-skills.py` for Claude Code, `extensions/require-skills.ts` for pi):
+- Hooks enforce this (rules in `policy/require-skills.ts`; adapters `hooks/require-skills.ts` for Claude Code, `extensions/require-skills.ts` for pi):
   - file edits and file-writing shell commands are blocked until `grill-me` ran and the user answered;
   - `git commit` is blocked until all five ran;
   - finishing a turn is pushed back once, unless a required skill or `grilling` ran in that turn
@@ -32,6 +32,6 @@ Rules:
 - A non-obvious decision goes in an ADR: `docs/adr/NNNN-short-title.md`.
 - Allowed: tool directives only (`eslint-disable`, `@ts-expect-error`, `noqa`, `type: ignore`, shebangs).
 - Hooks block edits that add comments
-  (`hooks/no-comments.py` for Claude Code, `extensions/no-comments.ts` for pi).
+  (rules in `policy/no-comments.ts`; adapters `hooks/no-comments.ts` for Claude Code, `extensions/no-comments.ts` for pi).
 - To clean up existing comments, the user runs `/delete-comments [path]`
   (pi: `/skill:delete-comments [path]`).

@@ -15,15 +15,25 @@ Modeled on [mitsuhiko/agent-stuff](https://github.com/mitsuhiko/agent-stuff) (pu
   `skills/lib/README.md`). `scripts/install-skills.sh` additionally copies `skills/` into the flat,
   non-package skill directories `~/.claude/skills/` (Claude Code) and `~/.agents/skills/` (the
   cross-harness convention `pi` also live-loads) — see `scripts/README.md`.
+- `policy/` — the agent guard rules, written once in TypeScript and shared by both harnesses:
+  - `require-skills.ts` — blocks `git commit`, pushes back on finishing a turn until the required
+    skills (listed in `AGENTS.md`) ran on the current branch, and blocks changes before `grill-me`
+    (see below);
+  - `no-comments.ts` — blocks edits that add new code comments (existing ones stay; tool
+    directives like `eslint-disable` are allowed);
+  - `workspace.ts` — the git facts the rules need (branch window start, newest change, repo root);
+  - `files.ts` — reading the current file content for comparisons.
 - `extensions/` — custom extension **source ported into this repo**, also declared via the `"pi"`
-  field. Currently: `require-skills.ts`, `no-comments.ts` (see `hooks/` below).
-- `hooks/require-skills.py` — Claude Code twin of
-  `extensions/require-skills.ts`. Both block `git commit` and push back on finishing a turn until
-  the required skills (listed in `AGENTS.md`) ran on the current branch (see below).
-- `hooks/no-comments.py` — Claude Code twin of `extensions/no-comments.ts`. Both block edits that
-  add new code comments (existing ones stay; tool directives like `eslint-disable` are allowed).
-  Both Claude hooks are registered **globally** in `~/.claude/settings.json` by
-  `scripts/install-claude-hooks.py` (part of `npm run setup`), pointing at this checkout.
+  field (`./extensions/*.ts`). Currently: `require-skills.ts`, `no-comments.ts` — thin pi adapters over
+  `policy/`; `extensions/lib/` holds their shared edit-input parsing and is not loaded as an extension.
+- `hooks/` — thin Claude Code adapters over `policy/` (`require-skills.ts`, `no-comments.ts`), run as
+  `node hooks/<name>.ts` (Node >= 23.6 runs TypeScript directly; `hooks/lib/` holds the shared
+  Claude hook I/O). Registered **globally** in `~/.claude/settings.json` by
+  `scripts/install-claude-hooks.mjs` (part of `npm run setup`), pointing at this checkout and pinned
+  to the Node binary that ran the installer. A hook that crashes blocks instead of letting the
+  action through.
+- `tests/` — `npm test` (`node --test`): rule tests as case tables, plus adapter tests against
+  temporary git repos.
 - `extensions/packages.json` / `scripts/install-packages.js` — extensions that are **installed
   as-is** from npm/GitHub (not vendored here), bulk-installed via `pi install <source>`.
 - `themes/` — pi themes, also declared via the `"pi"` field. Currently: `nightowl` (copied from
