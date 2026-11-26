@@ -19,28 +19,11 @@ Modeled on [mitsuhiko/agent-stuff](https://github.com/mitsuhiko/agent-stuff) (pu
   field. Currently: `require-skills.ts`, `no-comments.ts` (see `hooks/` below).
 - `hooks/require-skills.py` — Claude Code twin of
   `extensions/require-skills.ts`. Both block `git commit` and push back on finishing a turn until
-  the required skills (listed in `AGENTS.md`) ran since the last commit.
+  the required skills (listed in `AGENTS.md`) ran on the current branch (see below).
 - `hooks/no-comments.py` — Claude Code twin of `extensions/no-comments.ts`. Both block edits that
   add new code comments (existing ones stay; tool directives like `eslint-disable` are allowed).
   Both Claude hooks are registered **globally** in `~/.claude/settings.json` by
   `scripts/install-claude-hooks.py` (part of `npm run setup`), pointing at this checkout.
-
-### How `require-skills` decides
-
-- Reset point: HEAD's commit time. Skill runs before it are ignored.
-- "Changed" = uncommitted files in `git status` (catches `sed`, scripts, any tool) **or** edit-tool
-  calls in the session (covers non-git folders).
-- Last edit time = newest mtime of those files / last edit-tool call.
-- Pass when every required skill ran after the reset point **and** `code-review` ran after the
-  last edit.
-- Blocks `git commit` (also `rtk git commit`) and pushes back once per prompt when finishing.
-- Finishing is **not** pushed back when a skill ran in that turn: the skill may be waiting on
-  the user's answers.
-- Before any change: edit tools on files inside the repo, and shell commands that write files
-  (`sed -i`, `perl -i`, `>`/`>>`, `tee`, `mv`, `cp`, `rm`, `touch`, `mkdir`, `git apply/checkout/...`),
-  are blocked until `grill-me` ran **and** the user replied after it. Writes to `/tmp` are allowed;
-  `python3 -` scripts are not detected.
-- Any uncommitted file counts, including your own unrelated work in progress.
 - `extensions/packages.json` / `scripts/install-packages.js` — extensions that are **installed
   as-is** from npm/GitHub (not vendored here), bulk-installed via `pi install <source>`.
 - `themes/` — pi themes, also declared via the `"pi"` field. Currently: `nightowl` (copied from
@@ -50,6 +33,29 @@ Modeled on [mitsuhiko/agent-stuff](https://github.com/mitsuhiko/agent-stuff) (pu
   by `scripts/generate-workflow-json.js` instead of being declared in `package.json`.
 - `AGENTS.md` — project-level instructions pi auto-loads (`CLAUDE.md` imports it for Claude Code).
   Holds the required-skills order.
+- `docs/adr/` — architecture decision records.
+
+### How `require-skills` decides
+
+- Window start: where the branch split from the remote default branch (`git merge-base HEAD
+  origin/HEAD`, then `origin/main`, `origin/master`; else HEAD's commit time). Commits and amends
+  inside the task keep the history; a new branch or a push to the default branch resets it.
+- "Changed" = tracked files with uncommitted changes, untracked files modified after the window
+  start (old `.DS_Store`-style leftovers are ignored), or edit-tool calls in the session.
+- Last edit time = newest mtime of those files / last edit-tool call.
+- Skill calls that errored or were refused don't count.
+- Pass when every required skill ran inside the window **and** `code-review` ran after the
+  last edit.
+- Blocks `git commit` (also `rtk git commit`) and pushes back once per prompt when finishing.
+- Finishing is **not** pushed back when a required skill or `grilling` ran in that turn: it may
+  be waiting on the user's answers.
+- Before any change: edit tools on files inside the repo, and shell commands that write files
+  (`sed -i`, `perl -i`, `>`/`>>`, `tee`, `mv`, `cp`, `rm`, `touch`, `mkdir`, `git apply/checkout/...`,
+  Python scripts with `open(..., 'w')`, `write_text`, `os.remove`, `shutil.` ...), are blocked
+  until `grill-me` ran **and** the user replied after it. Shell redirects to `/tmp` are allowed;
+  inline Python writes (`python3 -c`, heredocs) are blocked wherever they point. `python3 script.py` is not inspected.
+- Any uncommitted tracked file counts, including your own unrelated work in progress.
+- Why it works this way: `docs/adr/0001-require-skills-window.md`.
 
 ## Install on a vanilla pi setup
 

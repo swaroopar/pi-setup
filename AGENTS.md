@@ -13,7 +13,8 @@ Every code change goes through these skills, **always in this order**:
 
 Rules:
 
-- A commit resets the cycle. The next change needs all five again.
+- A new branch (or a push to the default branch) resets the cycle. Within a branch, the
+  before-coding skills count once; `code-review` must still run after every last edit.
 - `grill-me` comes before **any** file change. Run it, then stop and wait for the user's answers.
 - When a skill asks the user something, end your turn and wait. Don't start the next skill
   until the current one is finished.
@@ -22,7 +23,8 @@ Rules:
 - Hooks enforce this (`hooks/require-skills.py` for Claude Code, `extensions/require-skills.ts` for pi):
   - file edits and file-writing shell commands are blocked until `grill-me` ran and the user answered;
   - `git commit` is blocked until all five ran;
-  - finishing a turn is pushed back once, unless a skill ran in that turn (it may be waiting on you).
+  - finishing a turn is pushed back once, unless a required skill or `grilling` ran in that turn
+    (it may be waiting on you).
 
 ## No code comments
 
