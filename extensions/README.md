@@ -3,7 +3,7 @@
 Two kinds of extension live here:
 
 - **Ported source** -- custom extension code vendored directly into this folder, declared via
-  `package.json`'s `"pi.extensions"` field (same mechanism as `skills/`). Currently: `require-skills.ts`.
+  `package.json`'s `"pi.extensions"` field (same mechanism as `skills/`). Currently: `require-skills.ts`, `no-comments.ts`.
 - **Installed as-is** -- extensions pulled straight from npm/GitHub, listed in `packages.json` and
   bulk-installed via `../scripts/install-packages.js` (`pi install <source>` per entry).
 

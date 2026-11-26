@@ -9,16 +9,18 @@ Modeled on [mitsuhiko/agent-stuff](https://github.com/mitsuhiko/agent-stuff) (pu
 ## Layout
 
 - `skills/` — slash-command skills (`SKILL.md` + supporting files), installed via the `"pi"` field
-  in `package.json`. Currently: `planner`, `beader`, `shipper`, `dependabot` (the latter two share
+  in `package.json`. Currently: `planner`, `beader`, `shipper`, `dependabot`, `delete-comments` (`shipper` and `dependabot` share
   `skills/lib/monitor-mr-github.sh`/`monitor-mr-gitlab.sh` for watching MR/PR CI status — see
   `skills/lib/README.md`). `scripts/install-skills.sh` additionally copies `skills/` into the flat,
   non-package skill directories `~/.claude/skills/` (Claude Code) and `~/.agents/skills/` (the
   cross-harness convention `pi` also live-loads) — see `scripts/README.md`.
 - `extensions/` — custom extension **source ported into this repo**, also declared via the `"pi"`
-  field. Currently: `require-skills.ts` (see `hooks/` below).
+  field. Currently: `require-skills.ts`, `no-comments.ts` (see `hooks/` below).
 - `hooks/require-skills.py` + `.claude/settings.json` — Claude Code twin of
   `extensions/require-skills.ts`. Both block `git commit` and push back on finishing a turn until
   the required skills (listed in `AGENTS.md`) ran since the last commit.
+- `hooks/no-comments.py` — Claude Code twin of `extensions/no-comments.ts`. Both block edits that
+  add new code comments (existing ones stay; tool directives like `eslint-disable` are allowed).
 - `extensions/packages.json` / `scripts/install-packages.js` — extensions that are **installed
   as-is** from npm/GitHub (not vendored here), bulk-installed via `pi install <source>`.
 - `themes/` — pi themes, also declared via the `"pi"` field. Currently: `nightowl` (copied from
@@ -88,8 +90,8 @@ details.
 ## Status
 
 - [x] Workflows (`bead_shipper`, `bead_shipper_batch`)
-- [x] Skills (`planner`, `beader`, `shipper`, `dependabot`)
+- [x] Skills (`planner`, `beader`, `shipper`, `dependabot`, `delete-comments`)
 - [x] Extensions installed from npm/GitHub (`extensions/packages.json` + `install-packages.js`)
-- [x] Extensions ported into this repo (`require-skills.ts`)
+- [x] Extensions ported into this repo (`require-skills.ts`, `no-comments.ts`)
 - [x] Theme (`nightowl`)
 - [x] `AGENTS.md` (required-skills order)

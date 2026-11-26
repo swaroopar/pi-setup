@@ -18,3 +18,13 @@ Rules:
 - Hooks enforce this: `git commit` is blocked and finishing a turn is
   pushed back until the skills have run
   (`hooks/require-skills.py` for Claude Code, `extensions/require-skills.ts` for pi).
+
+## No code comments
+
+- Don't write code comments. Make the code say it: clear names, types, small functions.
+- A non-obvious decision goes in an ADR: `docs/adr/NNNN-short-title.md`.
+- Allowed: tool directives only (`eslint-disable`, `@ts-expect-error`, `noqa`, `type: ignore`, shebangs).
+- Hooks block edits that add comments
+  (`hooks/no-comments.py` for Claude Code, `extensions/no-comments.ts` for pi).
+- To clean up existing comments, the user runs `/delete-comments [path]`
+  (pi: `/skill:delete-comments [path]`).
