@@ -16,11 +16,13 @@ Modeled on [mitsuhiko/agent-stuff](https://github.com/mitsuhiko/agent-stuff) (pu
   cross-harness convention `pi` also live-loads) — see `scripts/README.md`.
 - `extensions/` — custom extension **source ported into this repo**, also declared via the `"pi"`
   field. Currently: `require-skills.ts`, `no-comments.ts` (see `hooks/` below).
-- `hooks/require-skills.py` + `.claude/settings.json` — Claude Code twin of
+- `hooks/require-skills.py` — Claude Code twin of
   `extensions/require-skills.ts`. Both block `git commit` and push back on finishing a turn until
   the required skills (listed in `AGENTS.md`) ran since the last commit.
 - `hooks/no-comments.py` — Claude Code twin of `extensions/no-comments.ts`. Both block edits that
   add new code comments (existing ones stay; tool directives like `eslint-disable` are allowed).
+  Both Claude hooks are registered **globally** in `~/.claude/settings.json` by
+  `scripts/install-claude-hooks.py` (part of `npm run setup`), pointing at this checkout.
 - `extensions/packages.json` / `scripts/install-packages.js` — extensions that are **installed
   as-is** from npm/GitHub (not vendored here), bulk-installed via `pi install <source>`.
 - `themes/` — pi themes, also declared via the `"pi"` field. Currently: `nightowl` (copied from
