@@ -1,4 +1,5 @@
 import { readFileSync } from "node:fs";
+import { guardsEnabled } from "../../policy/guards-switch.ts";
 
 const BLOCKING_EXIT_CODE = 2;
 
@@ -32,6 +33,7 @@ export function blockStop(reason: string): void {
 }
 
 export function runHook(name: string, handle: (input: HookInput) => void): void {
+	if (!guardsEnabled()) return;
 	let input: HookInput | undefined;
 	try {
 		const parsed: HookInput = JSON.parse(readFileSync(0, "utf8"));

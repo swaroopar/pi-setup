@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { copyFileSync, existsSync, readFileSync, writeFileSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -9,6 +9,7 @@ const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const HOOKS_DIR = join(ROOT, "hooks");
 const CLAUDE_DIR = join(homedir(), ".claude");
 const SETTINGS = join(CLAUDE_DIR, "settings.json");
+const GUARDS_COMMAND_PATH = join(CLAUDE_DIR, "commands", "guards.md");
 
 const HOOK_REGISTRATIONS = {
 	PreToolUse: [
@@ -26,6 +27,21 @@ function nodeIsNewEnough() {
 function hookGroup(matcher, script) {
 	const group = { hooks: [{ type: "command", command: `"${process.execPath}" --no-warnings "${join(HOOKS_DIR, script)}" || exit 2` }] };
 	return matcher ? { matcher, ...group } : group;
+}
+
+function guardsCommandMarkdown() {
+	const script = `"${process.execPath}" --no-warnings "${join(ROOT, "scripts", "guards.ts")}" $ARGUMENTS`;
+	return [
+		"---",
+		"description: Turn the agent guards (require-skills, no-comments) on or off",
+		"argument-hint: on | off",
+		"allowed-tools: Bash",
+		"---",
+		`!\`${script}\``,
+		"",
+		"Repeat the line above to the user, word for word, and do nothing else.",
+		"",
+	].join("\n");
 }
 
 const pointsAtThisRepo = (group) => (group.hooks ?? []).some((hook) => String(hook.command ?? "").includes(HOOKS_DIR + sep));
@@ -48,3 +64,6 @@ for (const [event, entries] of Object.entries(HOOK_REGISTRATIONS)) {
 }
 writeFileSync(SETTINGS, `${JSON.stringify(settings, null, 2)}\n`);
 console.log(`registered ${HOOKS_DIR} hooks in ${SETTINGS}`);
+mkdirSync(dirname(GUARDS_COMMAND_PATH), { recursive: true });
+writeFileSync(GUARDS_COMMAND_PATH, guardsCommandMarkdown());
+console.log(`installed /guards command at ${GUARDS_COMMAND_PATH}`);

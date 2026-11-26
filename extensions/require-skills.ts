@@ -8,6 +8,7 @@ import {
 	type SessionInputs,
 	type ToolAction,
 } from "../policy/require-skills.ts";
+import { guardsEnabled, runGuardsCommand } from "../policy/guards-switch.ts";
 import { gitWorkspace } from "../policy/workspace.ts";
 import { unifiedEditSections } from "./lib/pi-edit.ts";
 import { failureReason, blockUnlessConfirmed } from "./lib/pi-gate.ts";
@@ -85,7 +86,13 @@ export default function (pi: ExtensionAPI) {
 		nudged = false;
 	});
 
+	pi.registerCommand("guards", {
+		description: "Turn the agent guards (require-skills, no-comments) on or off: /guards on | off",
+		handler: async (args, ctx) => ctx.ui.notify(runGuardsCommand(args), "info"),
+	});
+
 	pi.on("tool_call", async (event, ctx) => {
+		if (!guardsEnabled()) return;
 		let reason: string | undefined;
 		try {
 			reason = blockReasonForToolUse(toolAction(event.toolName, event.input, ctx.cwd), sessionInputs(ctx));
@@ -96,7 +103,7 @@ export default function (pi: ExtensionAPI) {
 	});
 
 	pi.on("agent_before_settle", async (event, ctx) => {
-		if (nudged) return;
+		if (nudged || !guardsEnabled()) return;
 		let reason: string | undefined;
 		try {
 			reason = blockReasonForStop(sessionInputs(ctx));

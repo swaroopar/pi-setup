@@ -5,6 +5,7 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 export const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+process.env.AGENT_GUARDS_OFF_FILE = join(mkdtempSync(join(tmpdir(), "guards-")), "off");
 
 const NOW_SECONDS = Math.floor(Date.now() / 1000);
 export const BASE_COMMIT = NOW_SECONDS - 2000;
@@ -65,6 +66,9 @@ export type PiHandlers = Record<string, (event: any, ctx: any) => Promise<any>>;
 export async function loadPiExtension(file: string): Promise<PiHandlers> {
 	const handlers: PiHandlers = {};
 	const extension = await import(join(REPO_ROOT, "extensions", file));
-	extension.default({ on: (name: string, handler: PiHandlers[string]) => (handlers[name] = handler) });
+	extension.default({
+		on: (name: string, handler: PiHandlers[string]) => (handlers[name] = handler),
+		registerCommand: (name: string, command: { handler: PiHandlers[string] }) => (handlers[`/${name}`] = command.handler),
+	});
 	return handlers;
 }

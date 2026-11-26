@@ -1,5 +1,6 @@
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { readTextOrEmpty } from "../policy/files.ts";
+import { guardsEnabled } from "../policy/guards-switch.ts";
 import { blockReasonForFileChanges, type FileChange } from "../policy/no-comments.ts";
 import { unifiedEditSections } from "./lib/pi-edit.ts";
 import { failureReason, blockUnlessConfirmed } from "./lib/pi-gate.ts";
@@ -23,6 +24,7 @@ function fileChanges(toolName: string, input: any, cwd: string): FileChange[] {
 
 export default function (pi: ExtensionAPI) {
 	pi.on("tool_call", async (event, ctx) => {
+		if (!guardsEnabled()) return;
 		try {
 			const reason = blockReasonForFileChanges(fileChanges(event.toolName, event.input, ctx.cwd));
 			if (reason) return { block: true, reason };
