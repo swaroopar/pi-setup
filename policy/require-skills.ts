@@ -29,9 +29,14 @@ export type SessionInputs = {
 	workspace: Workspace;
 };
 
+const HOW_TO_LOAD_SKILL =
+	"Load each skill yourself: Claude Code -> call the Skill tool; pi -> read the skill's SKILL.md. " +
+	"Doing the steps without loading the skill doesn't count, and skills loaded before this branch started don't count. " +
+	"Only if loading fails, ask the user to run /<skill> (pi: /skill:<skill>).";
+
 export const GRILL_FIRST_MESSAGE =
 	"No changes before grilling. Run the grill-me skill first and wait for the user's answers " +
-	"before changing any file in this repository.";
+	`before changing any file in this repository. ${HOW_TO_LOAD_SKILL}`;
 
 const WORKFLOW_NAME_RE = /\bmeta\s*(?::\s*\w+\s*)?=\s*(?=\{)[\s\S]*?[{,]\s*name\s*:\s*(['"`])((?:(?!\1)[^\n])+)\1/;
 const normalizedLabel = (label: string) => label.trim().toLowerCase().replace(/[\s_-]+/g, "-");
@@ -78,7 +83,7 @@ function missingSkillsMessage(missing: string[]): string {
 	return (
 		`Changes are not done. Run these skills first, in this order: ${missing.join(", ")}. ` +
 		`Required order: ${REQUIRED_SKILLS.join(" -> ")}. ` +
-		"If you can't invoke a skill yourself, ask the user to run /<skill> (pi: /skill:<skill>)."
+		HOW_TO_LOAD_SKILL
 	);
 }
 

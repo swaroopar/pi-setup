@@ -39,6 +39,7 @@ const cases: Case[] = [
 	{ name: "commit + write in one command: write still needs grilling", action: shell("git commit -m x && rm src/a.py"), events: [prompt(1100)], expected: GRILL_FIRST_MESSAGE },
 	{ name: "commit: in another repo is not gated", action: shell("cd ../other && git commit -m x"), events: [edit(1200)], expected: undefined },
 	{ name: "grill: edit before grill-me", action: EDIT_FILE, events: [prompt(1100)], expected: GRILL_FIRST_MESSAGE },
+	{ name: "grill: message says how to load the skill", action: EDIT_FILE, events: [prompt(1100)], expected: /pi -> read the skill's SKILL\.md/ },
 	{ name: "grill: started, no answer", action: EDIT_FILE, events: [prompt(1100), skill(1101, "grill-me")], expected: GRILL_FIRST_MESSAGE },
 	{ name: "grill: answered", action: EDIT_FILE, events: [skill(1100, "grill-me"), prompt(1101)], expected: undefined },
 	{ name: "grill: before the window", action: EDIT_FILE, events: [skill(500, "grill-me"), prompt(501), prompt(1100)], expected: GRILL_FIRST_MESSAGE },

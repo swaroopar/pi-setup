@@ -20,8 +20,9 @@ Rules:
   until the current one is finished.
 - When you run a required skill through a workflow or sub-agents, name the run after the skill
   (e.g. `code-review-session-diff`), so the hooks count it.
-- If you can't invoke a skill yourself, ask the user to run it
-  (Claude Code: `/<skill>`, pi: `/skill:<skill>`).
+- Load each skill yourself (Claude Code: the Skill tool; pi: read the skill's `SKILL.md`). Doing
+  the steps without loading the skill doesn't count, and skills loaded before this branch started
+  don't count. Only if loading fails, ask the user to run it (Claude Code: `/<skill>`, pi: `/skill:<skill>`).
 - Hooks enforce this (rules in `policy/require-skills.ts`; adapters `hooks/require-skills.ts` for Claude Code, `extensions/require-skills.ts` for pi):
   - file edits and shell commands that write inside the repo are blocked until `grill-me` ran and the user answered;
   - `git commit` is blocked until all five ran;
