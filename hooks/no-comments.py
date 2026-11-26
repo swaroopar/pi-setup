@@ -24,6 +24,8 @@ ALLOWED = re.compile(
     r"webpackChunkName|nosec|nosonar|swiftlint|ktlint|rubocop:|frozen_string_literal|coding[:=]",
     re.I,
 )
+STAR_LINE = re.compile(r"^\*(\s|/|$)")
+DOCSTRING_OPEN = re.compile(r"^[rRuUbB]{0,2}(\"\"\"|''')")
 
 
 def style(path):
@@ -45,7 +47,7 @@ def outside_quotes(code):
 def comment_of(line, kind):
     s = line.strip()
     if kind == "slash":
-        if s.startswith(("//", "/*", "*")):
+        if s.startswith(("//", "/*")) or STAR_LINE.match(s):
             return s
         m = re.search(r"\s(//|/\*)", line)
     elif kind == "hash":
@@ -66,11 +68,38 @@ def comments(text, kind):
     return Counter(c for c in found if c and c not in {"*", "*/", "/*", "/**"} and not ALLOWED.search(c))
 
 
+def docstrings(text):
+    lines, out, i = (text or "").splitlines(), Counter(), 0
+    while i < len(lines):
+        s = lines[i].strip()
+        m = DOCSTRING_OPEN.match(s)
+        i += 1
+        if not m:
+            quote = next((q for q in ('"""', "'''") if s.count(q) % 2), None)
+            while quote and i < len(lines):
+                i += 1
+                if quote in lines[i - 1]:
+                    break
+            continue
+        quote, body = m.group(1), [s]
+        if quote not in s[m.end():]:
+            while i < len(lines):
+                body.append(lines[i].strip())
+                i += 1
+                if quote in body[-1]:
+                    break
+        out[" ".join(body)] += 1
+    return out
+
+
 def added_comments(path, old, new):
     kind = style(path)
     if not kind:
         return []
-    return list((comments(new, kind) - comments(old, kind)).elements())
+    added = comments(new, kind) - comments(old, kind)
+    if path.endswith((".py", ".pyi")):
+        added += docstrings(new) - docstrings(old)
+    return list(added.elements())
 
 
 def read(path):

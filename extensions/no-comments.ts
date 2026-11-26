@@ -26,6 +26,8 @@ const ALLOWED = new RegExp(
 	"i",
 );
 const NOISE = new Set(["*", "*/", "/*", "/**"]);
+const STAR_LINE = /^\*(\s|\/|$)/;
+const DOCSTRING_OPEN = /^[rRuUbB]{0,2}("""|''')/;
 
 function style(path: string): Kind | undefined {
 	const name = basename(path).toLowerCase();
@@ -40,8 +42,8 @@ const outsideQuotes = (code: string) => ["'", '"', "`"].every((q) => code.split(
 function commentOf(line: string, kind: Kind): string | undefined {
 	const s = line.trim();
 	const [starts, inline] =
-		kind === "slash" ? [["//", "/*", "*"], /\s(\/\/|\/\*)/] : kind === "hash" ? [["#"], /\s#\s/] : [["--"], /\s--\s/];
-	if (starts.some((p) => s.startsWith(p))) return s;
+		kind === "slash" ? [["//", "/*"], /\s(\/\/|\/\*)/] : kind === "hash" ? [["#"], /\s#\s/] : [["--"], /\s--\s/];
+	if (starts.some((p) => s.startsWith(p)) || (kind === "slash" && STAR_LINE.test(s))) return s;
 	const m = inline.exec(line);
 	if (m && outsideQuotes(line.slice(0, m.index))) return line.slice(m.index).trim();
 }
@@ -55,14 +57,45 @@ function comments(text: string, kind: Kind): Map<string, number> {
 	return counts;
 }
 
+function docstrings(text: string): Map<string, number> {
+	const lines = (text ?? "").split("\n");
+	const counts = new Map<string, number>();
+	for (let i = 0; i < lines.length; ) {
+		const s = lines[i++].trim();
+		const m = DOCSTRING_OPEN.exec(s);
+		if (!m) {
+			const quote = ['"""', "'''"].find((q) => s.split(q).length % 2 === 0);
+			while (quote && i < lines.length) {
+				if (lines[i++].includes(quote)) break;
+			}
+			continue;
+		}
+		const body = [s];
+		if (!s.slice(m[0].length).includes(m[1])) {
+			while (i < lines.length) {
+				body.push(lines[i++].trim());
+				if (body[body.length - 1].includes(m[1])) break;
+			}
+		}
+		const key = body.join(" ");
+		counts.set(key, (counts.get(key) ?? 0) + 1);
+	}
+	return counts;
+}
+
+function diff(before: Map<string, number>, after: Map<string, number>): string[] {
+	const added: string[] = [];
+	for (const [c, n] of after) {
+		for (let i = before.get(c) ?? 0; i < n; i++) added.push(c);
+	}
+	return added;
+}
+
 function addedComments(path: string, oldText: string, newText: string): string[] {
 	const kind = style(path);
 	if (!kind) return [];
-	const before = comments(oldText, kind);
-	const added: string[] = [];
-	for (const [c, n] of comments(newText, kind)) {
-		for (let i = before.get(c) ?? 0; i < n; i++) added.push(c);
-	}
+	const added = diff(comments(oldText, kind), comments(newText, kind));
+	if (/\.pyi?$/.test(path)) added.push(...diff(docstrings(oldText), docstrings(newText)));
 	return added;
 }
 
