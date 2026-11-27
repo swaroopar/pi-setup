@@ -1,3 +1,5 @@
+import { guardsEnabled } from "../../policy/guards-switch.ts";
+
 type ConfirmContext = { hasUI?: boolean; ui?: { confirm(title: string, message: string): Promise<boolean> } };
 type Block = { block: true; reason: string };
 
@@ -9,4 +11,10 @@ export async function blockUnlessConfirmed(ctx: ConfirmContext, guardName: strin
 	if (!ctx.hasUI || !ctx.ui) return { block: true, reason };
 	const allowed = await ctx.ui.confirm(`${guardName}: allow this call anyway?`, reason);
 	return allowed ? undefined : { block: true, reason: `The user declined. ${reason}` };
+}
+
+export function whenPiGuardsOn<Args extends unknown[], Result>(
+	handler: (...args: Args) => Promise<Result>,
+): (...args: Args) => Promise<Result | undefined> {
+	return async (...args) => (guardsEnabled("pi") ? handler(...args) : undefined);
 }

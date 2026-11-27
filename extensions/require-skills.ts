@@ -8,10 +8,9 @@ import {
 	type SessionInputs,
 	type ToolAction,
 } from "../policy/require-skills.ts";
-import { guardsEnabled, runGuardsCommand } from "../policy/guards-switch.ts";
 import { gitWorkspace } from "../policy/workspace.ts";
 import { unifiedEditSections } from "./lib/pi-edit.ts";
-import { failureReason, blockUnlessConfirmed } from "./lib/pi-gate.ts";
+import { failureReason, blockUnlessConfirmed, whenPiGuardsOn } from "./lib/pi-gate.ts";
 
 const EDIT_TOOLS = new Set(["edit", "write"]);
 const DELEGATION_TOOLS = new Set(["Agent", "workflow"]);
@@ -86,13 +85,7 @@ export default function (pi: ExtensionAPI) {
 		nudged = false;
 	});
 
-	pi.registerCommand("guards", {
-		description: "Turn the agent guards (require-skills, no-comments) on or off: /guards on | off",
-		handler: async (args, ctx) => ctx.ui.notify(runGuardsCommand(args), "info"),
-	});
-
-	pi.on("tool_call", async (event, ctx) => {
-		if (!guardsEnabled()) return;
+	pi.on("tool_call", whenPiGuardsOn(async (event, ctx) => {
 		let reason: string | undefined;
 		try {
 			reason = blockReasonForToolUse(toolAction(event.toolName, event.input, ctx.cwd), sessionInputs(ctx));
@@ -100,10 +93,10 @@ export default function (pi: ExtensionAPI) {
 			reason = failureReason("require-skills", error);
 		}
 		if (reason) return blockUnlessConfirmed(ctx, "require-skills", reason);
-	});
+	}));
 
-	pi.on("agent_before_settle", async (event, ctx) => {
-		if (nudged || !guardsEnabled()) return;
+	pi.on("agent_before_settle", whenPiGuardsOn(async (event, ctx) => {
+		if (nudged) return;
 		let reason: string | undefined;
 		try {
 			reason = blockReasonForStop(sessionInputs(ctx));
@@ -116,5 +109,5 @@ export default function (pi: ExtensionAPI) {
 			entries: [...event.entries, { type: "custom_message", customType: "require-skills", content: reason, display: true }],
 			continue: true,
 		};
-	});
+	}));
 }

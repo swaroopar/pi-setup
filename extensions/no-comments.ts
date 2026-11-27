@@ -1,9 +1,8 @@
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { readTextOrEmpty } from "../policy/files.ts";
-import { guardsEnabled } from "../policy/guards-switch.ts";
 import { blockReasonForFileChanges, type FileChange } from "../policy/no-comments.ts";
 import { unifiedEditSections } from "./lib/pi-edit.ts";
-import { failureReason, blockUnlessConfirmed } from "./lib/pi-gate.ts";
+import { failureReason, blockUnlessConfirmed, whenPiGuardsOn } from "./lib/pi-gate.ts";
 
 function fileChanges(toolName: string, input: any, cwd: string): FileChange[] {
 	if (toolName === "write") {
@@ -23,13 +22,12 @@ function fileChanges(toolName: string, input: any, cwd: string): FileChange[] {
 }
 
 export default function (pi: ExtensionAPI) {
-	pi.on("tool_call", async (event, ctx) => {
-		if (!guardsEnabled()) return;
+	pi.on("tool_call", whenPiGuardsOn(async (event, ctx) => {
 		try {
 			const reason = blockReasonForFileChanges(fileChanges(event.toolName, event.input, ctx.cwd));
 			if (reason) return { block: true, reason };
 		} catch (error) {
 			return blockUnlessConfirmed(ctx, "no-comments", failureReason("no-comments", error));
 		}
-	});
+	}));
 }

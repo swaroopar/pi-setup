@@ -64,7 +64,7 @@ function missingSkills(events: SessionEvent[], newestChange = 0): string[] {
 	const missing = REQUIRED_SKILLS.filter((skill) => !ran.has(skill));
 	const reviewedAfterEdit = skillRuns.some((e) => e.name === REVIEW_SKILL && e.at >= lastEdit);
 	if (ran.has(REVIEW_SKILL) && !reviewedAfterEdit) {
-		missing.push(`${REVIEW_SKILL} (again: files changed after the last review)`);
+		missing.push(`${REVIEW_SKILL} (again: files changed after the last review — load the ${REVIEW_SKILL} skill again, then review; an inline re-review doesn't count)`);
 	}
 	return missing;
 }

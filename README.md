@@ -33,9 +33,10 @@ Modeled on [mitsuhiko/agent-stuff](https://github.com/mitsuhiko/agent-stuff) (pu
   `scripts/install-claude-guards.mjs` (part of `npm run setup`), pointing at this checkout and pinned
   to the Node binary that ran the installer. A hook that crashes on a tool call asks the user
   with the error; a crash elsewhere (or a hook that fails to load) blocks.
-- `policy/guards-switch.ts` + `scripts/guards.ts` — the global on/off switch for all guards:
-  `/guards off`, `/guards on`, `/guards` (state), in Claude Code and pi, no restart. State is the
-  flag file `~/.config/agent-guards/off`. See `docs/adr/0002-guards-switch.md`.
+- `policy/guards-switch.ts` + `scripts/guards.ts` + `extensions/guards.ts` — one on/off switch per
+  tool for all guards: `/guards off`, `/guards on`, `/guards` (state), no restart. The command only
+  affects the tool it runs in. State is the flag files `~/.config/agent-guards/off-claude` and
+  `off-pi`. See `docs/adr/0003-per-tool-guards-switch.md`.
 - `tests/` — `npm test` (`node --test`): rule tests as case tables, plus adapter tests against
   temporary git repos.
 - `extensions/packages.json` / `scripts/install-packages.js` — extensions that are **installed

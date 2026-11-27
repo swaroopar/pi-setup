@@ -31,8 +31,8 @@ Rules:
   - finishing a turn is pushed back once, unless a required skill or `grilling` ran in that turn
     (it may be waiting on you).
 
-- The user can turn all guards off and on with `/guards off` / `/guards on` (Claude Code and pi).
-  Don't do it yourself.
+- The user can turn the guards off and on with `/guards off` / `/guards on`. Each tool has its own
+  switch: the command only affects the tool it runs in (Claude Code or pi). Don't do it yourself.
 
 ## No code comments
 

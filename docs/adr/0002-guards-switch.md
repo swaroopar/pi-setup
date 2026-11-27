@@ -2,7 +2,7 @@
 
 ## Status
 
-Accepted (2026-11-26)
+Superseded by [0003](0003-per-tool-guards-switch.md) (2026-11-27)
 
 ## Context
 

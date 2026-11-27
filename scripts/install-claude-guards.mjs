@@ -33,7 +33,7 @@ function guardsCommandMarkdown() {
 	const script = `"${process.execPath}" --no-warnings "${join(ROOT, "scripts", "guards.ts")}" $ARGUMENTS`;
 	return [
 		"---",
-		"description: Turn the agent guards (require-skills, no-comments) on or off",
+		"description: Turn the agent guards (require-skills, no-comments) on or off in Claude Code",
 		"argument-hint: on | off",
 		"allowed-tools: Bash",
 		"---",

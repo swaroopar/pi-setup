@@ -5,7 +5,7 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 export const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-process.env.AGENT_GUARDS_OFF_FILE = join(mkdtempSync(join(tmpdir(), "guards-")), "off");
+process.env.AGENT_GUARDS_DIR = mkdtempSync(join(tmpdir(), "guards-"));
 
 const NOW_SECONDS = Math.floor(Date.now() / 1000);
 export const BASE_COMMIT = NOW_SECONDS - 2000;
