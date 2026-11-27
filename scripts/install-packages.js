@@ -12,10 +12,11 @@ const { execFileSync } = require('child_process')
 const fs = require('fs')
 const os = require('os')
 const path = require('path')
+const { packageEntriesWithFilters } = require('./pi-package-filters.js')
 
 const ROOT_DIR = path.join(__dirname, '..')
 const SETTINGS_PATH = path.join(os.homedir(), '.pi', 'agent', 'settings.json')
-const FILTER_KEYS = ['extensions', 'skills', 'prompts', 'themes']
+const THIS_REPO_FILTERS = { skills: [] }
 
 const packages = JSON.parse(fs.readFileSync(path.join(ROOT_DIR, 'extensions', 'packages.json'), 'utf8'))
 
@@ -41,30 +42,17 @@ for (const { source, description } of packages) {
 }
 
 const settings = JSON.parse(fs.readFileSync(SETTINGS_PATH, 'utf8'))
-let settingsChanged = false
+const { entries, warnings } = packageEntriesWithFilters({
+  entries: settings.packages ?? [],
+  declaredPackages: packages,
+  thisRepoFilters: THIS_REPO_FILTERS,
+  thisRepoDir: ROOT_DIR,
+  settingsDir: path.dirname(SETTINGS_PATH),
+})
+for (const warning of warnings) console.warn(`warning: ${warning}`)
 
-for (const entry of packages) {
-  const filters = {}
-  for (const key of FILTER_KEYS) {
-    if (entry[key] !== undefined) filters[key] = entry[key]
-  }
-  if (Object.keys(filters).length === 0) continue
-
-  const idx = settings.packages.findIndex((p) => (typeof p === 'string' ? p : p.source) === entry.source)
-  if (idx === -1) {
-    console.warn(`warning: ${entry.source} has filters in packages.json but isn't in ${SETTINGS_PATH} -- skipping`)
-    continue
-  }
-
-  const next = { source: entry.source, ...filters }
-  if (JSON.stringify(settings.packages[idx]) !== JSON.stringify(next)) {
-    settings.packages[idx] = next
-    settingsChanged = true
-    console.log(`applied resource filter for ${entry.source}`)
-  }
-}
-
-if (settingsChanged) {
+if (JSON.stringify(entries) !== JSON.stringify(settings.packages ?? [])) {
+  settings.packages = entries
   fs.writeFileSync(SETTINGS_PATH, JSON.stringify(settings, null, 2) + '\n')
-  console.log(`updated ${SETTINGS_PATH}`)
+  console.log(`updated resource filters in ${SETTINGS_PATH}`)
 }

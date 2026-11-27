@@ -8,13 +8,11 @@ Modeled on [mitsuhiko/agent-stuff](https://github.com/mitsuhiko/agent-stuff) (pu
 
 ## Layout
 
-- `skills/` — slash-command skills (`SKILL.md` + supporting files), installed via the `"pi"` field
-  in `package.json`. Currently: `planner`, `beader`, `shipper`, `dependabot`, `delete-comments`, `naming-analyzer` (vendored from softaworks/agent-toolkit), `grill-me`,
+- `skills/` — slash-command skills (`SKILL.md` + supporting files), copied to `~/.claude/skills/` and
+  `~/.agents/skills/` by `scripts/install-skills.sh` (pi loads them from the latter). Currently: `planner`, `beader`, `shipper`, `dependabot`, `delete-comments`, `naming-analyzer` (vendored from softaworks/agent-toolkit), `grill-me`,
   `grilling`, `improve-codebase-architecture` (vendored from mattpocock/skills, see each `SOURCE.md`; `shipper` and `dependabot` share
   `skills/lib/monitor-mr-github.sh`/`monitor-mr-gitlab.sh` for watching MR/PR CI status — see
-  `skills/lib/README.md`). `scripts/install-skills.sh` additionally copies `skills/` into the flat,
-  non-package skill directories `~/.claude/skills/` (Claude Code) and `~/.agents/skills/` (the
-  cross-harness convention `pi` also live-loads) — see `scripts/README.md`.
+  `skills/lib/README.md`). See `scripts/README.md`.
 - `policy/` — the agent guard rules, written once in TypeScript and shared by both harnesses:
   - `require-skills.ts` — stops `git commit`, pushes back on finishing a turn until the required
     skills (listed in `AGENTS.md`) ran on the current branch, and stops changes before `grill-me`
@@ -89,13 +87,15 @@ Clone this repo, then run the one command:
 npm run setup
 ```
 
-That's `package.json`'s `scripts.setup`, which chains all four underlying steps:
+That's `package.json`'s `scripts.setup`, which chains all five underlying steps:
 
 ```bash
-# 1. Register this repo's skills + ported extensions as a pi package
+# 1. Register this repo as a pi package (its extensions; step 2 filters its skills out)
 pi install .
 
-# 2. Bulk-install the extensions that just come from npm/GitHub as-is
+# 2. Bulk-install the extensions that just come from npm/GitHub as-is, then write the resource
+#    filters into ~/.pi/agent/settings.json (incl. "skills": [] on this repo's own entry, since
+#    step 4 already gives pi these skills via ~/.agents/skills)
 node scripts/install-packages.js
 
 # 3. Materialize the saved workflows (separate mechanism, see workflows/README.md)
@@ -103,14 +103,20 @@ node scripts/generate-workflow-json.js
 
 # 4. Copy skills/ into the flat skill directories Claude Code / pi load from directly
 scripts/install-skills.sh
+
+# 5. Register the Claude Code hooks and install the /guards command (global)
+node scripts/install-claude-guards.mjs
 ```
 
 Step 1 registers this checkout's path in the `packages` array in `~/.pi/agent/settings.json` —
 the same way `git:github.com/DietrichGebert/ponytail` shows up there today (use `pi install
 git:github.com/<your-github-user>/pi-setup` instead if you'd rather pi manage its own clone under
-`~/.pi/agent/git/` than point at this working copy). From then on, every pi session discovers
-`skills/` and `extensions/` from this repo automatically. `pi update` pulls future changes; `pi
-remove <source>` uninstalls it; `pi config` opens a TUI to toggle individual resources on/off.
+`~/.pi/agent/git/` than point at this working copy). From then on, every pi session loads
+`extensions/` from this repo automatically. Its `skills/` are filtered out of the package entry
+(`"skills": []`, written by step 2), because step 4 already gives pi the same skills through
+`~/.agents/skills/`, and loading both makes pi warn about duplicate skills. Re-running setup
+resets that entry's filters, so don't hand-edit them with `pi config`. `pi update` pulls future
+changes; `pi remove <source>` uninstalls it; `pi config` toggles resources of the other packages.
 
 Step 2 loops over `extensions/packages.json` (currently a snapshot of this machine's own
 `~/.pi/agent/settings.json` `packages` array — prune it to taste), runs `pi install <source>` for
@@ -118,15 +124,16 @@ each npm:/git: source not already installed, then applies any per-package resour
 declared there (e.g. `git:github.com/mitsuhiko/agent-stuff` is installed in full for `pi update`
 but filtered down to 6 of its 18 extensions and 4 of its 19 skills) by writing pi's documented
 filter object form straight into `~/.pi/agent/settings.json` — see `extensions/README.md`. No `pi
-config` TUI step needed; it's all file-based and idempotent.
+config` TUI step needed; it's all file-based and idempotent. It also sets this repo's own
+entry to `"skills": []` (see step 1); the logic lives in `scripts/pi-package-filters.js`.
 
 Step 3 is separate because saved `Workflow` definitions aren't a `"pi"`-field resource type — no
 installed package declares a `"workflows"` key; `~/.pi/workflows/saved/` is user state, not
 package content. See `scripts/README.md` for details.
 
-Step 4 is also separate from the `"pi"` field: registering this repo as a package (step 1) is
-enough for a `pi` session run *against this checkout's path*, but Claude Code has no package
-mechanism at all. `scripts/install-skills.sh` instead copies every entry under `skills/` (including
+Step 4 is how both harnesses get the skills: pi through `~/.agents/skills/` (`package.json` still
+lists them under `"pi"`, but step 2 filters them out of the package), and Claude Code, which has no
+package mechanism at all, through `~/.claude/skills/`. `scripts/install-skills.sh` copies every entry under `skills/` (including
 the non-skill `lib/` helper directory) into `~/.claude/skills/` and `~/.agents/skills/` — the latter
 a cross-harness convention `pi` live-loads unconditionally every session alongside its own package
 mechanism, and one that's also managed by a separate skill-installer tool on this machine (it has
